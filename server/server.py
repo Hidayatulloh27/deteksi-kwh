@@ -410,6 +410,59 @@ threading.Thread(target=cek_listrik_mati, daemon=True).start()
 threading.Thread(target=start_retrain, daemon=True).start()
 # 🔥 JALANKAN AUTO RETRAIN (BACKGROUND)
 # =========================
+# =========================
+# API LATEST DATA
+# =========================
+@app.route("/api/latest", methods=["GET"])
+def api_latest():
+    try:
+        if not os.path.exists(FILE):
+            return jsonify({
+                "voltage": 0,
+                "current": 0,
+                "power": 0,
+                "frequency": 0,
+                "pf": 0,
+                "kwh": 0,
+                "status": "OFFLINE",
+                "relay": False,
+                "pln": False
+            })
+
+        df = pd.read_csv(FILE)
+
+        if df.empty:
+            return jsonify({
+                "voltage": 0,
+                "current": 0,
+                "power": 0,
+                "frequency": 50,
+                "pf": 0.98,
+                "kwh": 0,
+                "status": "OFFLINE",
+                "relay": False,
+                "pln": False
+            })
+
+        latest = df.iloc[-1]
+
+        # cek apakah ESP masih kirim data
+        is_online = (time.time() - last_data_time) < 10
+
+        return jsonify({
+            "voltage": float(latest.get("voltage", 0)),
+            "current": float(latest.get("current", 0)),
+            "power": float(latest.get("power", 0)),
+            "frequency": 50,
+            "pf": 0.98,
+            "kwh": float(latest.get("kwh", 0)),
+            "status": latest.get("status", "NORMAL") if is_online else "OFFLINE",
+            "relay": is_online,
+            "pln": float(latest.get("voltage", 0)) >= 50 if is_online else False
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # RUN
 # =========================
 if __name__ == "__main__":

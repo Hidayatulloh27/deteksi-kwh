@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartKWH — IoT Energy Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-mark">
+      <span class="logo-bolt">⚡</span>
+      <div>
+        <div class="logo-name">Smart<span>KWH</span></div>
+        <div class="logo-sub">IoT Energy Monitor</div>
+      </div>
+    </div>
+    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </div>
+
+  <nav class="sidebar-nav">
+    <button class="nav-item active" data-page="dashboard">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-item" data-page="beban">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      <span>Pengujian Beban</span>
+    </button>
+    <button class="nav-item" data-page="history">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>Riwayat</span>
+    </button>
+    <button class="nav-item" data-page="settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Pengaturan</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-status">
+    <div class="device-status" id="deviceStatus">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusLabel">ESP32 Online</span>
+    </div>
+    <div class="pln-pill" id="plnPill">PLN MENYALA</div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main" id="main">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="mob-menu" id="mobMenu" aria-label="Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="page-title" id="pageTitle">Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="timestamp-wrap">
+        <div class="ts-date" id="tsDate">—</div>
+        <div class="ts-time" id="tsTime">—:—:—</div>
+      </div>
+      <div class="status-badge-top" id="topBadge">
+        <span class="badge-dot"></span>
+        <span id="topBadgeText">NORMAL</span>
+      </div>
+      <div class="relay-indicator" id="relayIndicator">
+        <span>RELAY</span>
+        <span class="relay-dot on" id="relayDot"></span>
+        <span id="relayLabel">ON</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ALERT BAR -->
+  <div class="alert-bar" id="alertBar" role="alert">
+    <span class="alert-icon">⚠</span>
+    <span id="alertMsg">Kondisi abnormal terdeteksi</span>
+    <button onclick="document.getElementById('alertBar').classList.remove('show')" class="alert-close">✕</button>
+  </div>
+
+  <!-- PAGE: DASHBOARD -->
+  <section class="page active" id="page-dashboard">
+
+    <!-- METRIC CARDS GRID -->
+    <div class="metrics-grid">
+      <div class="metric-card" data-param="voltage" onclick="openModal('voltage')">
+        <div class="mc-header">
+          <span class="mc-label">Tegangan</span>
+          <span class="mc-icon">⚡</span>
+        </div>
+        <div class="mc-value" id="mV">219.2</div>
+        <div class="mc-unit">Volt</div>
+        <div class="mc-sparkline">
+          <canvas id="spkV" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mVmin">Min: —</span>
+          <span class="mc-max" id="mVmax">Max: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+
+      <div class="metric-card" data-param="current" onclick="openModal('current')">
+        <div class="mc-header">
+          <span class="mc-label">Arus</span>
+          <span class="mc-icon">〜</span>
+        </div>
+        <div class="mc-value" id="mA">0.13</div>
+        <div class="mc-unit">Ampere</div>
+        <div class="mc-sparkline">
+          <canvas id="spkA" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mAmin">Min: —</span>
+          <span class="mc-max" id="mAmax">Max: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+
+      <div class="metric-card" data-param="power" onclick="openModal('power')">
+        <div class="mc-header">
+          <span class="mc-label">Daya Aktif</span>
+          <span class="mc-icon">◈</span>
+        </div>
+        <div class="mc-value" id="mW">14.8</div>
+        <div class="mc-unit">Watt</div>
+        <div class="mc-sparkline">
+          <canvas id="spkW" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mWmin">Min: —</span>
+          <span class="mc-max" id="mWmax">Max: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+
+      <div class="metric-card" data-param="frequency" onclick="openModal('frequency')">
+        <div class="mc-header">
+          <span class="mc-label">Frekuensi</span>
+          <span class="mc-icon">≋</span>
+        </div>
+        <div class="mc-value" id="mHz">50.0</div>
+        <div class="mc-unit">Hertz</div>
+        <div class="mc-sparkline">
+          <canvas id="spkHz" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mHzmin">Min: —</span>
+          <span class="mc-max" id="mHzmax">Max: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+
+      <div class="metric-card" data-param="pf" onclick="openModal('pf')">
+        <div class="mc-header">
+          <span class="mc-label">Faktor Daya</span>
+          <span class="mc-icon">φ</span>
+        </div>
+        <div class="mc-value" id="mPF">0.98</div>
+        <div class="mc-unit">cos φ</div>
+        <div class="mc-sparkline">
+          <canvas id="spkPF" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mPFmin">Min: —</span>
+          <span class="mc-max" id="mPFmax">Max: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+
+      <div class="metric-card accent-card" data-param="kwh" onclick="openModal('kwh')">
+        <div class="mc-header">
+          <span class="mc-label">Energi kWh</span>
+          <span class="mc-icon">◉</span>
+        </div>
+        <div class="mc-value" id="mKwh">0.42</div>
+        <div class="mc-unit">kWh</div>
+        <div class="mc-sparkline">
+          <canvas id="spkKwh" width="120" height="36" aria-hidden="true"></canvas>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-min" id="mKwhmin">Hari ini: —</span>
+          <span class="mc-max" id="mKwhmax">Bulan: —</span>
+        </div>
+        <div class="mc-hint">Klik untuk detail →</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ROW -->
+    <div class="bottom-row">
+
+      <!-- MAIN POWER CHART -->
+      <div class="chart-panel">
+        <div class="panel-header">
+          <div class="panel-title">Grafik Daya P(t)</div>
+          <div class="toggle-group">
+            <button class="tgl active" onclick="setChartRange(this,'1h')">1j</button>
+            <button class="tgl" onclick="setChartRange(this,'6h')">6j</button>
+            <button class="tgl" onclick="setChartRange(this,'24h')">24j</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="mainChart" role="img" aria-label="Grafik daya aktif real-time dalam Watt">Grafik daya aktif P(t)</canvas>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-col">
+
+        <!-- COST PANEL -->
+        <div class="info-panel">
+          <div class="panel-header">
+            <div class="panel-title">Biaya Listrik</div>
+            <span class="trend-badge" id="trendBadge">STABIL</span>
+          </div>
+          <div class="cost-grid">
+            <div class="cost-item">
+              <div class="cost-label">Total Akumulasi</div>
+              <div class="cost-val" id="costTotal">Rp 753.002</div>
+            </div>
+            <div class="cost-item">
+              <div class="cost-label">Bulan Ini</div>
+              <div class="cost-val" id="costMonth">Rp 45.821</div>
+            </div>
+            <div class="cost-item">
+              <div class="cost-label">Prediksi Akhir Bulan</div>
+              <div class="cost-val amber" id="costPredict">Rp 1.527</div>
+            </div>
+            <div class="cost-item">
+              <div class="cost-label">Confidence AI</div>
+              <div class="cost-val" id="costConf">50%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HYBRID DETECTION -->
+        <div class="info-panel">
+          <div class="panel-header">
+            <div class="panel-title">Hybrid Detection</div>
+          </div>
+          <div class="detection-rows">
+            <div class="det-row">
+              <span class="det-label">Rule-Based Status</span>
+              <span class="det-val" id="detRule">NORMAL</span>
+            </div>
+            <div class="det-row">
+              <span class="det-label">ΔP Temporal</span>
+              <span class="det-val" id="detDelta">+2.1 W/s</span>
+            </div>
+            <div class="det-row">
+              <span class="det-label">Fluktuasi Abnormal</span>
+              <span class="det-val green" id="detFluk">Tidak</span>
+            </div>
+            <div class="det-row">
+              <span class="det-label">Device Cycling</span>
+              <span class="det-val" id="detCycle">Tidak ada</span>
+            </div>
+            <div class="det-row">
+              <span class="det-label">Siklus ON-OFF</span>
+              <span class="det-val" id="detCycleCount">0× / 10 mnt</span>
+            </div>
+            <div class="det-row">
+              <span class="det-label">Periode Siklus</span>
+              <span class="det-val" id="detCyclePeriod">— detik</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGE: BEBAN PENGUJIAN -->
+  <section class="page" id="page-beban">
+    <div class="beban-intro">
+      <h2 class="section-heading">Pengujian Beban Listrik</h2>
+      <p class="section-sub">Enam perangkat uji representatif — klik kartu untuk aktifkan simulasi beban dan lihat grafik historis respons sistem.</p>
+    </div>
+    <div class="beban-grid" id="bebanGrid">
+      <!-- Cards injected by JS -->
+    </div>
+
+    <!-- BEBAN DETAIL CHART -->
+    <div class="chart-panel beban-chart-panel" id="bebanChartPanel" style="display:none">
+      <div class="panel-header">
+        <div class="panel-title" id="bebanChartTitle">—</div>
+        <button class="tgl active" onclick="closeBebanChart()">✕ Tutup</button>
+      </div>
+      <div class="beban-chart-row">
+        <div class="chart-wrap half">
+          <canvas id="bebanPowerChart" role="img" aria-label="Grafik daya beban yang dipilih">Grafik daya beban</canvas>
+        </div>
+        <div class="chart-wrap half">
+          <canvas id="bebanCurrentChart" role="img" aria-label="Grafik arus beban yang dipilih">Grafik arus beban</canvas>
+        </div>
+      </div>
+      <div class="beban-stats-row" id="bebanStats"></div>
+    </div>
+  </section>
+
+  <!-- PAGE: RIWAYAT -->
+  <section class="page" id="page-history">
+    <div class="section-heading-row">
+      <h2 class="section-heading">Riwayat Kejadian</h2>
+      <div class="filter-row">
+        <button class="filter-btn active" onclick="filterLogs(this,'ALL')">Semua</button>
+        <button class="filter-btn" onclick="filterLogs(this,'WARNING')">Warning</button>
+        <button class="filter-btn" onclick="filterLogs(this,'HIGH_CONSUMPTION')">High</button>
+        <button class="filter-btn" onclick="filterLogs(this,'SHORT_CIRCUIT')">Short Circuit</button>
+      </div>
+    </div>
+    <div class="log-table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr><th>Waktu</th><th>Kondisi</th><th>Daya (W)</th><th>Arus (A)</th><th>Tegangan (V)</th><th>AI</th></tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 24H Chart -->
+    <div class="chart-panel" style="margin-top:1.5rem">
+      <div class="panel-header"><div class="panel-title">Grafik 24 Jam Terakhir</div></div>
+      <div class="chart-wrap">
+        <canvas id="histChart" role="img" aria-label="Grafik daya 24 jam terakhir">Grafik historis 24 jam</canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGE: SETTINGS -->
+  <section class="page" id="page-settings">
+    <h2 class="section-heading">Pengaturan Sistem</h2>
+    <div class="settings-grid">
+      <div class="settings-card">
+        <div class="settings-title">Koneksi API</div>
+        <div class="settings-row">
+          <label>Base URL Railway</label>
+          <input type="text" id="cfgUrl" value="https://your-railway-app.up.railway.app" placeholder="https://...">
+        </div>
+        <div class="settings-row">
+          <label>Polling Interval (detik)</label>
+          <input type="number" id="cfgInterval" value="2" min="1" max="60">
+        </div>
+        <button class="save-btn" onclick="saveSettings()">Simpan Pengaturan</button>
+      </div>
+      <div class="settings-card">
+        <div class="settings-title">Ambang Batas Deteksi</div>
+        <div class="settings-row"><label>Warning Daya (W)</label><input type="number" id="cfgWarn" value="900"></div>
+        <div class="settings-row"><label>High Consumption (W)</label><input type="number" id="cfgHigh" value="1800"></div>
+        <div class="settings-row"><label>Short Circuit (W)</label><input type="number" id="cfgShort" value="3000"></div>
+        <div class="settings-row"><label>dI/dt Short Circuit (A/s)</label><input type="number" id="cfgDidt" value="50"></div>
+        <button class="save-btn" onclick="saveSettings()">Simpan</button>
+      </div>
+      <div class="settings-card">
+        <div class="settings-title">Device Cycling</div>
+        <div class="settings-row"><label>Jendela Waktu Tw (menit)</label><input type="number" id="cfgTw" value="10"></div>
+        <div class="settings-row"><label>Min Siklus n_min</label><input type="number" id="cfgNmin" value="3"></div>
+        <div class="settings-row"><label>δ_on threshold (W)</label><input type="number" id="cfgDon" value="50"></div>
+        <div class="settings-row"><label>θ_fluk (W/s)</label><input type="number" id="cfgFluk" value="200"></div>
+        <button class="save-btn" onclick="saveSettings()">Simpan</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- MODAL DETAIL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+  <div class="modal-box" onclick="e=>e.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">—</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-current">
+      <div class="modal-big-val" id="modalBigVal">—</div>
+      <div class="modal-big-unit" id="modalBigUnit">—</div>
+    </div>
+    <div class="modal-stats-row">
+      <div class="modal-stat"><div class="ms-label">Min (1j)</div><div class="ms-val" id="modalMin">—</div></div>
+      <div class="modal-stat"><div class="ms-label">Max (1j)</div><div class="ms-val" id="modalMax">—</div></div>
+      <div class="modal-stat"><div class="ms-label">Rata-rata</div><div class="ms-val" id="modalAvg">—</div></div>
+      <div class="modal-stat"><div class="ms-label">Terakhir</div><div class="ms-val" id="modalLast">—</div></div>
+    </div>
+    <div class="modal-chart-wrap">
+      <canvas id="modalChart" role="img" aria-label="Grafik historis parameter">Grafik detail</canvas>
+    </div>
+    <div class="modal-table-wrap">
+      <table class="modal-table">
+        <thead><tr><th>Waktu</th><th>Nilai</th></tr></thead>
+        <tbody id="modalTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
