@@ -1,6 +1,6 @@
 import requests
 
-url = "https://deteksi-kwh-production.up.railway.app/data"
+url = "https://web-production-b1df4.up.railway.app"
 
 data = {
     "voltage": 220,
