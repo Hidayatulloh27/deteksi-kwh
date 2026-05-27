@@ -5,7 +5,7 @@ import os
 import sys
 import numpy as np
 import threading
-from ml_pipeline.retrain import start_retrain
+#from ml_pipeline.retrain import start_retrain
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.helper import to_float, load_csv_safe
@@ -411,7 +411,7 @@ def cek_listrik_mati():
         time.sleep(5)
 
 threading.Thread(target=cek_listrik_mati, daemon=True).start()
-threading.Thread(target=start_retrain, daemon=True).start()
+#threading.Thread(target=start_retrain, daemon=True).start()
 # 🔥 JALANKAN AUTO RETRAIN (BACKGROUND)
 # =========================
 # =========================
