@@ -471,9 +471,65 @@ function updateDetectionPanel(data) {
 }
 
 function updateCostPanel(data) {
+
+  // Tarif PLN
+  const tarif = 1444.7;
+
+  // kWh realtime dari ESP
+  const kwh = data.kwh || 0;
+
+  // Perhitungan biaya
+  const totalBiaya = kwh * tarif;
+  const bulanIni = totalBiaya * 0.3;
+  const prediksi = totalBiaya * 1.2;
+
+  // Format rupiah
+  const rupiah = (n) =>
+    'Rp ' + Math.round(n).toLocaleString('id-ID');
+
+  // ===== UPDATE HTML =====
+  document.getElementById('costTotal').textContent =
+    rupiah(totalBiaya);
+
+  document.getElementById('costMonth').textContent =
+    rupiah(bulanIni);
+
+  document.getElementById('costPredict').textContent =
+    rupiah(prediksi);
+
+  // ===== AI CONFIDENCE =====
+  let confidence = 95;
+
+  if (data.status === 'WARNING') {
+    confidence = 75;
+  }
+
+  if (data.status === 'HIGH_CONSUMPTION') {
+    confidence = 60;
+  }
+
+  if (data.status === 'SHORT_CIRCUIT') {
+    confidence = 20;
+  }
+
+  document.getElementById('costConf').textContent =
+    confidence + '%';
+
+  // ===== TREND =====
   const trendBadge = document.getElementById('trendBadge');
-  trendBadge.textContent = 'STABIL';
-  trendBadge.className = 'trend-badge';
+
+  if (data.power > 1500) {
+    trendBadge.textContent = 'TINGGI';
+    trendBadge.className = 'trend-badge danger';
+  }
+  else if (data.power > 800) {
+    trendBadge.textContent = 'NAIK';
+    trendBadge.className = 'trend-badge warning';
+  }
+  else {
+    trendBadge.textContent = 'STABIL';
+    trendBadge.className = 'trend-badge';
+  }
 }
 
 function checkAlerts(data) {
