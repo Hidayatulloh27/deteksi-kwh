@@ -196,7 +196,7 @@ def cek_csv():
 # =========================
 # API
 # =========================
-@app.route("/data", methods=["POST"])
+@app.route("/api/update", methods=["POST"])
 def receive_data():
     global last_notif_time, last_status, last_data_time
 
