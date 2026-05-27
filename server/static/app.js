@@ -474,7 +474,11 @@ function updateDetectionPanel(data) {
 }
 
 function updateCostPanel(data) {
+const biayaPerJam =
+  (data.power / 1000) * tarif;
 
+const biayaPerDetik =
+  biayaPerJam / 3600;
   // Tarif PLN
   const tarif = 1444.7;
 
@@ -517,7 +521,8 @@ function updateCostPanel(data) {
 
   document.getElementById('costConf').textContent =
     confidence + '%';
-
+  document.getElementById('costRealtime').textContent =
+  'Rp ' + biayaPerDetik.toFixed(4) + '/detik';
   // ===== TREND =====
   const trendBadge = document.getElementById('trendBadge');
 
