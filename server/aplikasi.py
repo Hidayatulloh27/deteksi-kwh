@@ -1,9 +1,22 @@
 print("SERVER APP BERJALAN")
-from flask import Flask, render_template, request, jsonify
+
+from flask import Flask, request, jsonify
 import time
 import os
+import json
+import pandas as pd
 
 app = Flask(__name__)
+
+# =========================
+# FILE DATA
+# =========================
+DATA_FILE = "data/data.csv"
+
+# =========================
+# BUAT FOLDER DATA
+# =========================
+os.makedirs("data", exist_ok=True)
 
 # =========================
 # WAKTU TERAKHIR DATA
@@ -26,6 +39,28 @@ latest_data = {
 }
 
 # =========================
+# BUAT CSV JIKA BELUM ADA
+# =========================
+if not os.path.exists(DATA_FILE):
+    df = pd.DataFrame(columns=[
+        "timestamp",
+        "voltage",
+        "current",
+        "power",
+        "frequency",
+        "pf",
+        "kwh",
+        "status",
+        "relay",
+        "pln"
+    ])
+
+    df.to_csv(DATA_FILE, index=False)
+
+    print("📁 FILE CSV DIBUAT")
+
+
+# =========================
 # HALAMAN UTAMA
 # =========================
 @app.route('/')
@@ -44,11 +79,11 @@ def home():
 
 
 # =========================
-# HALAMAN DASHBOARD
+# DASHBOARD
 # =========================
 @app.route('/dashboard')
 def dashboard():
-    return "<h1>DASHBOARD AKTIF</h1>"
+    return "<h1>✅ DASHBOARD AKTIF</h1>"
 
 
 # =========================
@@ -56,10 +91,13 @@ def dashboard():
 # =========================
 @app.route('/api/latest')
 def api_latest():
-    global latest_data, last_update
 
-    # jika lebih dari 10 detik tidak ada data
+    global latest_data
+    global last_update
+
+    # jika tidak ada data >10 detik
     if time.time() - last_update > 10:
+
         return jsonify({
             "voltage": 0,
             "current": 0,
@@ -80,25 +118,70 @@ def api_latest():
 # =========================
 @app.route('/api/update', methods=['POST'])
 def api_update():
-    global latest_data, last_update
+
+    global latest_data
+    global last_update
 
     try:
-        data = request.json
 
+        print("📡 REQUEST MASUK")
+
+        data = request.get_json()
+
+        print("📦 DATA:", data)
+
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "No JSON"
+            }), 400
+
+        # =========================
+        # AMBIL DATA
+        # =========================
         latest_data = {
-            "voltage": data.get("voltage", 0),
-            "current": data.get("current", 0),
-            "power": data.get("power", 0),
-            "frequency": data.get("frequency", 50),
-            "pf": data.get("pf", 0),
-            "kwh": data.get("kwh", 0),
-            "status": data.get("status", "NORMAL"),
-            "relay": data.get("relay", True),
-            "pln": data.get("pln", True)
+            "voltage": float(data.get("voltage", 0)),
+            "current": float(data.get("current", 0)),
+            "power": float(data.get("power", 0)),
+            "frequency": float(data.get("frequency", 50)),
+            "pf": float(data.get("pf", 0)),
+            "kwh": float(data.get("kwh", 0)),
+            "status": str(data.get("status", "NORMAL")),
+            "relay": bool(data.get("relay", True)),
+            "pln": bool(data.get("pln", True))
         }
 
-        # simpan waktu terakhir data masuk
+        # =========================
+        # UPDATE WAKTU
+        # =========================
         last_update = time.time()
+
+        # =========================
+        # SIMPAN KE CSV
+        # =========================
+        row = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "voltage": latest_data["voltage"],
+            "current": latest_data["current"],
+            "power": latest_data["power"],
+            "frequency": latest_data["frequency"],
+            "pf": latest_data["pf"],
+            "kwh": latest_data["kwh"],
+            "status": latest_data["status"],
+            "relay": latest_data["relay"],
+            "pln": latest_data["pln"]
+        }
+
+        print("💾 MENYIMPAN CSV:", row)
+
+        pd.DataFrame([row]).to_csv(
+            DATA_FILE,
+            mode='a',
+            header=False,
+            index=False
+        )
+
+        print("✅ BERHASIL DISIMPAN")
 
         return jsonify({
             "success": True,
@@ -107,6 +190,9 @@ def api_update():
         })
 
     except Exception as e:
+
+        print("❌ ERROR:", str(e))
+
         return jsonify({
             "success": False,
             "error": str(e)
@@ -114,10 +200,38 @@ def api_update():
 
 
 # =========================
-# HEALTH CHECK RAILWAY
+# CEK CSV
+# =========================
+@app.route('/cek_csv')
+def cek_csv():
+
+    try:
+
+        if not os.path.exists(DATA_FILE):
+            return jsonify({
+                "error": "CSV tidak ditemukan"
+            })
+
+        df = pd.read_csv(DATA_FILE)
+
+        return df.tail(20).to_json(
+            orient="records",
+            indent=2
+        )
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        })
+
+
+# =========================
+# HEALTH CHECK
 # =========================
 @app.route('/health')
 def health():
+
     return jsonify({
         "status": "healthy"
     })
@@ -127,6 +241,7 @@ def health():
 # RUN FLASK
 # =========================
 if __name__ == '__main__':
+
     port = int(os.environ.get("PORT", 5000))
 
     app.run(
