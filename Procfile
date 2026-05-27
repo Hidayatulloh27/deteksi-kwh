@@ -1,1 +1,1 @@
-﻿web: cd server && gunicorn aplikasi:app
+﻿web: gunicorn server.aplikasi:app
