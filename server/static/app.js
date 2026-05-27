@@ -665,13 +665,10 @@ function showBebanChart(idx) {
 
   document.getElementById('bebanChartTitle').textContent = `Beban ${b.id} — ${b.name} · Historis Pengujian`;
 
-  // Generate simulated historical data for beban
-  const ticks = 60;
-  const pwrData = [], currData = [], labels = [];
-  const pwrData = stores.power.data.slice(-60);
+  // Data realtime dari monitoring utama
+const pwrData = stores.power.data.slice(-60);
 const currData = stores.current.data.slice(-60);
 const labels = stores.power.labels.slice(-60);
-}
 
   // Power chart
   if (bebanPowerChart) bebanPowerChart.destroy();
