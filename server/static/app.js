@@ -474,13 +474,16 @@ function updateDetectionPanel(data) {
 }
 
 function updateCostPanel(data) {
-const biayaPerJam =
-  (data.power / 1000) * tarif;
 
-const biayaPerDetik =
-  biayaPerJam / 3600;
   // Tarif PLN
   const tarif = 1444.7;
+
+  // Biaya realtime
+  const biayaPerJam =
+    (data.power / 1000) * tarif;
+
+  const biayaPerDetik =
+    biayaPerJam / 3600;
 
   // kWh realtime dari ESP
   const kwh = data.kwh || 0;
@@ -504,6 +507,13 @@ const biayaPerDetik =
   document.getElementById('costPredict').textContent =
     rupiah(prediksi);
 
+  // ===== REALTIME =====
+  const realtimeEl = document.getElementById('costRealtime');
+
+if (realtimeEl) {
+  realtimeEl.textContent =
+    'Rp ' + biayaPerDetik.toFixed(6) + '/detik';
+}
   // ===== AI CONFIDENCE =====
   let confidence = 95;
 
@@ -521,8 +531,7 @@ const biayaPerDetik =
 
   document.getElementById('costConf').textContent =
     confidence + '%';
-  document.getElementById('costRealtime').textContent =
-  'Rp ' + biayaPerDetik.toFixed(4) + '/detik';
+
   // ===== TREND =====
   const trendBadge = document.getElementById('trendBadge');
 
