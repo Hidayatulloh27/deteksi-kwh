@@ -1,13 +1,21 @@
 print("SERVER APP BERJALAN")
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 import time
 import os
 import pandas as pd
 from datetime import datetime
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+    
+)
+CORS(app)
 # =========================
 # FILE CSV
 # =========================
@@ -57,20 +65,14 @@ latest_data = {
 # =========================
 @app.route('/')
 def home():
-    return """
-    <h1>⚡ API Monitoring KWH Aktif</h1>
-
-    <p>GET /api/latest</p>
-    <p>POST /api/update</p>
-    <p>GET /api/csv</p>
-    """
+    return render_template('index.html')
 
 # =========================
 # DASHBOARD
 # =========================
 @app.route('/dashboard')
 def dashboard():
-    return "<h1>DASHBOARD AKTIF</h1>"
+    return render_template('index.html')
 
 # =========================
 # API LATEST
