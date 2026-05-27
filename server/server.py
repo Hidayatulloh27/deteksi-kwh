@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
+print("🔥 SERVER VERSION BARU AKTIF")
+
 FILE = "data/data.csv"
 ERROR_FILE = "data/error_log.csv"
 STATE_FILE = "data/state.txt"
@@ -198,12 +200,14 @@ def cek_csv():
 # =========================
 @app.route("/api/update", methods=["POST"])
 def receive_data():
+    print("📡 ADA REQUEST MASUK")
     global last_notif_time, last_status, last_data_time
 
     try:
         ensure_csv()
 
         data = request.get_json()
+        print("📦 JSON:", data)
         if not data:
             return jsonify({"error":"No JSON"}),400
 
