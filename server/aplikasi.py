@@ -48,7 +48,7 @@ def home():
 # =========================
 @app.route('/dashboard')
 def dashboard():
-    return render_template('index.html')
+    return "<h1>DASHBOARD AKTIF</h1>"
 
 
 # =========================
