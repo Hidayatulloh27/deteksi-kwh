@@ -1,6 +1,6 @@
 /* ── CONFIG ──────────────────────────────────────────────── */
-let BASE_URL = '';
-let POLL_INTERVAL = 500;
+let BASE_URL = 'https://web-production-b1df4.up.railway.app';
+let POLL_INTERVAL = 2000;
 
 const CFG = {
   warnPower: 900, highPower: 1800, shortPower: 3000,
@@ -289,25 +289,39 @@ function classifyStatus(p, a) {
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
   try {
-    const res = await fetch(BASE_URL + '/api/latest', {
-      signal: AbortSignal.timeout(2000)
+    const res = await fetch(`${BASE_URL}/api/latest`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
 
-    if (!res.ok) throw new Error('API Error');
-
-    const data = await res.json();
-
-    // kalau data kosong anggap offline
-    if (!data || Object.keys(data).length === 0) {
-      throw new Error('No Data');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
     }
 
-    return data;
+    const result = await res.json();
+
+    // format API railway:
+    // { success:true, data:{...} }
+    const data = result.data || result;
+
+    return {
+      voltage: data.voltage || 0,
+      current: data.current || 0,
+      power: data.power || 0,
+      frequency: data.frequency || 0,
+      pf: data.pf || 0,
+      kwh: data.kwh || 0,
+      status: data.status || 'NORMAL',
+      relay: data.relay ?? true,
+      pln: data.pln ?? true,
+      deltaP: (data.power || 0) - lastPower
+    };
 
   } catch (err) {
     console.error('API Error:', err);
 
-    // paksa OFFLINE
     return {
       voltage: 0,
       current: 0,
