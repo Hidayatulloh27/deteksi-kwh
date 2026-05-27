@@ -316,7 +316,7 @@ async function fetchLatest() {
       status: data.status || 'NORMAL',
       relay: data.relay ?? true,
       pln: data.pln ?? true,
-      deltaP: (data.power || 0) - lastPower
+      deltaP: Number(((data.power || 0) - lastPower).toFixed(2))
     };
 
   } catch (err) {
@@ -462,7 +462,10 @@ function updateMainChart(power) {
 function updateDetectionPanel(data) {
   const dp = data.deltaP || 0;
   setEl('detRule', data.status || 'NORMAL');
-  setEl('detDelta', (dp >= 0 ? '+' : '') + dp + ' W/s');
+  setEl(
+  'detDelta',
+  (dp >= 0 ? '+' : '') + dp.toFixed(2) + ' W/s'
+);
   const abnormal = Math.abs(dp) > CFG.tfluk;
   setElClass('detFluk', abnormal ? 'red' : 'green', abnormal ? 'Ya' : 'Tidak');
   setElClass('detCycle', data.cycling ? 'amber' : '', data.cycling ? 'Terdeteksi' : 'Tidak ada');
@@ -660,12 +663,10 @@ function showBebanChart(idx) {
   // Generate simulated historical data for beban
   const ticks = 60;
   const pwrData = [], currData = [], labels = [];
-  for (let t = 0; t < ticks; t++) {
-    const raw = b.simulate(t);
-    pwrData.push(+raw.power.toFixed(2));
-    currData.push(+raw.current.toFixed(3));
-    labels.push(t % 10 === 0 ? `${t}s` : '');
-  }
+  const pwrData = stores.power.data.slice(-60);
+const currData = stores.current.data.slice(-60);
+const labels = stores.power.labels.slice(-60);
+}
 
   // Power chart
   if (bebanPowerChart) bebanPowerChart.destroy();
@@ -846,6 +847,9 @@ async function tick() {
   console.log("DATA API:", data);
 
   render(data);
+  if (activeBeban !== null) {
+  showBebanChart(activeBeban);
+  }
 }
 
 /* ── SIDEBAR TOGGLE ──────────────────────────────────────── */
