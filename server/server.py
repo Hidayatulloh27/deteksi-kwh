@@ -15,7 +15,6 @@ from config import THRESHOLD_DEFAULT, NOTIF_INTERVAL, BUDGET_BULANAN
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-print("AAAAAAAAAAAA SERVER BARU")
 print("🔥 SERVER VERSION BARU AKTIF")
 
 FILE = "data/data.csv"
