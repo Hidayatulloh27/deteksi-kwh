@@ -1,6 +1,6 @@
 /* ── CONFIG ──────────────────────────────────────────────── */
 let BASE_URL = 'https://web-production-b1df4.up.railway.app';
-let POLL_INTERVAL = 2000;
+let POLL_INTERVAL = 1000;
 
 const CFG = {
   warnPower: 900, highPower: 1800, shortPower: 3000,
@@ -21,9 +21,10 @@ const stores = {
 let logEntries = [];
 let lastPower = 0;
 let cycleHistory = [];
+let cycleTransitions = 0;
 let activeBeban = null;
 let pollTimer = null;
-
+let lastLoggedStatus = '';
 /* ── BEBAN DEFINITIONS ───────────────────────────────────── */
 const BEBAN_LIST = [
   {
@@ -162,28 +163,63 @@ function initMainChart() {
 }
 
 function initHistChart() {
-  const ctx = document.getElementById('histChart').getContext('2d');
+
+  const canvas = document.getElementById('histChart');
+
+  if (!canvas) {
+    console.log("Canvas histChart tidak ditemukan");
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+
   charts.hist = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: Array.from({ length: 48 }, (_, i) => i % 4 === 0 ? `${23 - Math.floor(i / 2)}:00` : ''),
+      labels: [],
       datasets: [
-        { label: 'Daya (W)', ...chartDefaults('#00d4aa'), data: generateHistData() },
-        { label: 'Arus (A)×100', ...chartDefaults('#3b82f6'), data: generateHistData(0.5, 0.3) }
+        {
+          label: 'Daya (W)',
+          ...chartDefaults('#00d4aa'),
+          data: []
+        },
+        {
+          label: 'Arus (A)×100',
+          ...chartDefaults('#3b82f6'),
+          data: []
+        }
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: { mode: 'index', intersect: false }
       },
       scales: {
-        x: { ticks: { color: '#3d4a60', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', maxTicksLimit: 5 } }
+        x: {
+          ticks: {
+            color: '#3d4a60',
+            font: { size: 9 }
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.04)'
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(255,255,255,0.05)'
+          },
+          ticks: {
+            color: '#64748b',
+            maxTicksLimit: 5
+          }
+        }
       }
     }
   });
+  console.log("Hist chart initialized");
 }
 
 function generateHistData(base = 80, variance = 60) {
@@ -277,15 +313,56 @@ function generateSimData() {
     cycling: false, cycleCount: 0, cyclePeriod: null, cycleDevice: null,
   };
 }
+function detectCycling(power) {
 
+  // simpan histori daya
+  cycleHistory.push(power);
+
+  // maksimal 20 data
+  if (cycleHistory.length > 20) {
+    cycleHistory.shift();
+  }
+
+  // reset transisi
+  let transitions = 0;
+
+  // cek perubahan ON/OFF
+  for (let i = 1; i < cycleHistory.length; i++) {
+
+    const prev = cycleHistory[i - 1];
+    const curr = cycleHistory[i];
+
+    // jika perubahan daya besar
+    if (
+   (prev < 20 && curr > 100) ||
+   (prev > 100 && curr < 20)
+) {
+   transitions++;
+}
+  }
+
+  cycleTransitions = transitions;
+
+  // minimal 3 transisi dianggap cycling
+  return transitions >= 3;
+}
 function classifyStatus(p, a) {
-  if (p > CFG.shortPower && a > 15) return 'SHORT_CIRCUIT';
-  if (p > CFG.highPower) return 'HIGH_CONSUMPTION';
-  if (p > CFG.warnPower) return 'WARNING';
-  if (p < 5 && a < 0.05) return 'NO_LOAD';
+
+  // Deteksi lonjakan daya mendadak
+  if (Math.abs(p - lastPower) > 2000 && a > 10) {
+    return 'SHORT_CIRCUIT';
+  }
+  if (p > CFG.highPower) {
+    return 'HIGH_CONSUMPTION';
+  }
+  if (p > CFG.warnPower) {
+    return 'WARNING';
+  }
+  if (p < 5 && a < 0.05) {
+    return 'NO_LOAD';
+  }
   return 'NORMAL';
 }
-
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
   try {
@@ -305,7 +382,13 @@ async function fetchLatest() {
     // format API railway:
     // { success:true, data:{...} }
     const data = result.data || result;
+    const cyclingDetected =
+  detectCycling(data.power || 0);
+    let finalStatus = data.status || 'NORMAL';
 
+if (cyclingDetected) {
+  finalStatus = 'CYCLING_DETECTED';
+}
     return {
       voltage: data.voltage || 0,
       current: data.current || 0,
@@ -313,10 +396,13 @@ async function fetchLatest() {
       frequency: data.frequency || 0,
       pf: data.pf || 0,
       kwh: data.kwh || 0,
-      status: data.status || 'NORMAL',
+      status: finalStatus,
       relay: data.relay ?? true,
       pln: data.pln ?? true,
-      deltaP: Number(((data.power || 0) - lastPower).toFixed(2))
+      deltaP: Number(((data.power || 0) - lastPower).toFixed(2)),
+      cycling: cyclingDetected,
+      cycleCount: cycleTransitions,
+      cyclePeriod: data.cyclePeriod || null
     };
 
   } catch (err) {
@@ -340,12 +426,15 @@ async function fetchLatest() {
 /* ── RENDER ──────────────────────────────────────────────── */
 function render(data) {
   updateTimestamp();
+  updateLastUpdate();
+
   updateMetricCards(data);
   updateStatusBadge(data);
   updateMainChart(data.power);
   updateDetectionPanel(data);
   updateCostPanel(data);
   checkAlerts(data);
+
   lastPower = data.power;
 }
 
@@ -356,7 +445,14 @@ function updateTimestamp() {
   document.getElementById('tsTime').textContent =
     now.toLocaleTimeString('id-ID', { hour12: false });
 }
+/* ── UPDATE LAST UPDATE ───────────────────────────── */
+function updateLastUpdate() {
 
+  const el = document.getElementById('lastUpdate');
+  if (!el) return;
+  el.textContent =
+    'Last update: ' + new Date().toLocaleTimeString();
+}
 function updateMetricCards(data) {
   const now = new Date().toLocaleTimeString('id-ID', { hour12: false });
   const params = [
@@ -405,22 +501,25 @@ function updateStatusBadge(data) {
   }
 
   // ===== STATUS BADGE =====
-  const s = data.status || 'NORMAL';
+const s = data.status || 'NORMAL';
+const badge = document.getElementById('topBadge');
+const badgeText = document.getElementById('topBadgeText');
+badge.className = 'status-badge-top';
+if (s === 'WARNING') {
+  badge.classList.add('warning');
+}
+else if (s === 'HIGH_CONSUMPTION') {
+  badge.classList.add('high');
+}
+else if (s === 'SHORT_CIRCUIT') {
+  badge.classList.add('danger');
+}
+else if (s === 'CYCLING_DETECTED') {
+  badge.classList.add('warning');
+}
 
-  const badge = document.getElementById('topBadge');
-  const badgeText = document.getElementById('topBadgeText');
-
-  badge.className = 'status-badge-top';
-
-  if (s === 'WARNING') {
-    badge.classList.add('warning');
-  } else if (s === 'HIGH_CONSUMPTION') {
-    badge.classList.add('high');
-  } else if (s === 'SHORT_CIRCUIT') {
-    badge.classList.add('danger');
-  }
-
-  badgeText.textContent = s.replace('_', ' ');
+badgeText.textContent =
+  s.replaceAll('_', ' ');
 
   // ===== RELAY =====
   const relayDot = document.getElementById('relayDot');
@@ -469,7 +568,7 @@ function updateDetectionPanel(data) {
   const abnormal = Math.abs(dp) > CFG.tfluk;
   setElClass('detFluk', abnormal ? 'red' : 'green', abnormal ? 'Ya' : 'Tidak');
   setElClass('detCycle', data.cycling ? 'amber' : '', data.cycling ? 'Terdeteksi' : 'Tidak ada');
-  setEl('detCycleCount', (data.cycleCount || 0) + '× / 10 mnt');
+  setEl('detCycleCount', data.cycleCount || 0);
   setEl('detCyclePeriod', data.cyclePeriod ? data.cyclePeriod + ' detik' : '— detik');
 }
 
@@ -548,28 +647,57 @@ if (realtimeEl) {
     trendBadge.className = 'trend-badge';
   }
 }
-
 function checkAlerts(data) {
   const s = data.status || 'NORMAL';
+
   const bar = document.getElementById('alertBar');
   const msg = document.getElementById('alertMsg');
+
   if (s === 'SHORT_CIRCUIT') {
-    msg.textContent = '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis! dI/dt > 50 A/s';
+
+    msg.textContent =
+      '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis! dI/dt > 50 A/s';
+
     bar.classList.add('show');
     addLog(data);
+
   } else if (s === 'HIGH_CONSUMPTION') {
-    msg.textContent = '⚠ HIGH CONSUMPTION — daya melebihi 1.800 W, periksa beban!';
+
+    msg.textContent =
+      '⚠ HIGH CONSUMPTION — daya melebihi 1.800 W, periksa beban!';
+
     bar.classList.add('show');
     addLog(data);
+
   } else if (s === 'WARNING') {
-    msg.textContent = '⚡ WARNING — daya mendekati batas aman (900–1800 W)';
+
+    msg.textContent =
+      '⚡ WARNING — daya mendekati batas aman (900–1800 W)';
+
     bar.classList.add('show');
     addLog(data);
+
+  } else if (s === 'CYCLING_DETECTED') {
+
+    msg.textContent =
+      '🔄 DEVICE CYCLING terdeteksi — pola ON/OFF berulang';
+
+    bar.classList.add('show');
+    addLog(data);
+
+  } else {
+
+    bar.classList.remove('show');
+
+    if (s === 'NORMAL') {
+      lastLoggedStatus = '';
+    }
   }
 }
-
 function addLog(data) {
   const s = data.status;
+  if (lastLoggedStatus === s) return;
+lastLoggedStatus = s;
   if (!s || s === 'NORMAL' || s === 'NO_LOAD') return;
   const now = new Date();
   logEntries.unshift({
@@ -663,6 +791,7 @@ function selectBeban(idx) {
 
   activeBeban = idx;
   showBebanChart(idx);
+  updateBebanRealtime();
   showToast(`Simulasi Beban ${idx + 1}: ${BEBAN_LIST[idx].name} diaktifkan`);
 }
 
@@ -722,10 +851,18 @@ const labels = stores.power.labels.slice(-60);
   });
 
   // Stats
-  const avgP = (pwrData.reduce((a, b) => a + b, 0) / pwrData.length).toFixed(1);
-  const maxP = Math.max(...pwrData).toFixed(1);
-  const minP = Math.min(...pwrData).toFixed(1);
-  const avgA = (currData.reduce((a, b) => a + b, 0) / currData.length).toFixed(3);
+  const avgP = pwrData.length
+  ? (pwrData.reduce((a, b) => a + b, 0) / pwrData.length).toFixed(1)
+  : 0;
+ const maxP = pwrData.length
+  ? Math.max(...pwrData).toFixed(1)
+  : 0;
+const minP = pwrData.length
+  ? Math.min(...pwrData).toFixed(1)
+  : 0;
+const avgA = currData.length
+  ? (currData.reduce((a, b) => a + b, 0) / currData.length).toFixed(3)
+  : 0;
 
   document.getElementById('bebanStats').innerHTML = `
     <div class="bstat"><div class="bstat-label">Daya Rata-rata</div><div class="bstat-val">${avgP} W</div></div>
@@ -736,7 +873,24 @@ const labels = stores.power.labels.slice(-60);
     <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA)}</div></div>
   `;
 }
+function updateBebanRealtime() {
 
+  if (!bebanPowerChart || !bebanCurrentChart) return;
+
+  const pwrData = stores.power.data.slice(-60);
+  const currData = stores.current.data.slice(-60);
+  const labels = stores.power.labels.slice(-60);
+
+  // update chart daya
+  bebanPowerChart.data.labels = labels;
+  bebanPowerChart.data.datasets[0].data = pwrData;
+  bebanPowerChart.update('none');
+
+  // update chart arus
+  bebanCurrentChart.data.labels = labels;
+  bebanCurrentChart.data.datasets[0].data = currData;
+  bebanCurrentChart.update('none');
+}
 function closeBebanChart() {
   document.getElementById('bebanChartPanel').style.display = 'none';
   document.querySelectorAll('.beban-card').forEach(c => c.classList.remove('active-beban'));
@@ -857,10 +1011,42 @@ async function tick() {
 
   console.log("DATA API:", data);
 
+  try {
   render(data);
-  if (activeBeban !== null) {
-  showBebanChart(activeBeban);
+
+// realtime history page
+if (document.getElementById('page-history')?.classList.contains('active')) {
+  renderLogs(currentFilter);
+
+  // update chart histori realtime
+  if (charts.hist) {
+    const now = new Date().toLocaleTimeString('id-ID', {
+      hour12: false
+    });
+
+    if (charts.hist.data.labels.length >= 48) {
+      charts.hist.data.labels.shift();
+
+      charts.hist.data.datasets[0].data.shift();
+      charts.hist.data.datasets[1].data.shift();
+    }
+
+    charts.hist.data.labels.push(now);
+
+    charts.hist.data.datasets[0].data.push(data.power);
+    charts.hist.data.datasets[1].data.push(data.current * 100);
+
+    charts.hist.update('none');
   }
+}
+
+if (activeBeban !== null) {
+  updateBebanRealtime();
+}
+  }
+catch(err) {
+  console.error("Render error:", err);
+}
 }
 
 /* ── SIDEBAR TOGGLE ──────────────────────────────────────── */

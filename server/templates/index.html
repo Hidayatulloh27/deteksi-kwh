@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SmartKWH — IoT Energy Monitor</title>
+<title>Kupit_3D KWH — IoT Energy Monitor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -78,6 +78,9 @@
         <span class="relay-dot on" id="relayDot"></span>
         <span id="relayLabel">ON</span>
       </div>
+      <div id="lastUpdate" class="last-update">
+  Last update: --:--:--
+</div>
     </div>
   </header>
 
@@ -236,20 +239,17 @@
               <div class="cost-label">Prediksi Akhir Bulan</div>
               <div class="cost-val amber" id="costPredict">Rp 1.527</div>
             </div>
-            <div class="cost-row">
-            <span>Biaya Realtime</span>
-            <strong id="costRealtime">Rp 0/detik</strong>
-          </div>
+          
             <div class="cost-item">
               <div class="cost-label">Confidence AI</div>
               <div class="cost-val" id="costConf">50%</div>
             </div>
             <div class="cost-item">
-          <div class="cost-label">Biaya Realtime</div>
-          <div class="cost-val green" id="costRealtime">
-            Rp 0/jam
+            <div class="cost-label">Biaya Realtime</div>
+            <div class="cost-val green" id="costRealtimeText">
+              Rp 0/jam
+            </div>
           </div>
-        </div>
           </div>
         </div>
 
@@ -386,7 +386,7 @@
 
 <!-- MODAL DETAIL -->
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
-  <div class="modal-box" onclick="e=>e.stopPropagation()">
+  <div class="modal-box" onclick="event.stopPropagation()"></div>
     <div class="modal-header">
       <div class="modal-title" id="modalTitle">—</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
@@ -417,6 +417,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=2"></script>
 </body>
 </html>
