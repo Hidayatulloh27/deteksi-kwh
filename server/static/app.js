@@ -3,7 +3,7 @@ let BASE_URL = 'https://web-production-b1df4.up.railway.app';
 let POLL_INTERVAL = 1000;
 
 const CFG = {
-  warnPower: 900, highPower: 1800, shortPower: 3000,
+  warnPower: 300, highPower: 700, shortPower: 3000,
   didtShort: 50, tw: 10, nmin: 3, don: 50, tfluk: 200
 };
 
@@ -24,7 +24,6 @@ let cycleHistory = [];
 let cycleTransitions = 0;
 let activeBeban = null;
 let pollTimer = null;
-let lastLoggedStatus = '';
 /* ── BEBAN DEFINITIONS ───────────────────────────────────── */
 const BEBAN_LIST = [
   {
@@ -318,8 +317,8 @@ function detectCycling(power) {
   // simpan histori daya
   cycleHistory.push(power);
 
-  // maksimal 20 data
-  if (cycleHistory.length > 20) {
+  // maksimal 8 data
+  if (cycleHistory.length > 8) {
     cycleHistory.shift();
   }
 
@@ -332,13 +331,15 @@ function detectCycling(power) {
     const prev = cycleHistory[i - 1];
     const curr = cycleHistory[i];
 
-    // jika perubahan daya besar
-    if (
-   (prev < 20 && curr > 100) ||
-   (prev > 100 && curr < 20)
-) {
-   transitions++;
-}
+    // lonjakan besar
+    if (Math.abs(curr - prev) > 150) {
+      transitions++;
+    }
+
+    // perubahan ON → OFF
+    if (prev > 100 && curr < 20) {
+      transitions++;
+    }
   }
 
   cycleTransitions = transitions;
@@ -346,10 +347,14 @@ function detectCycling(power) {
   // minimal 3 transisi dianggap cycling
   return transitions >= 3;
 }
+
 function classifyStatus(p, a) {
 
   // Deteksi lonjakan daya mendadak
-  if (Math.abs(p - lastPower) > 2000 && a > 10) {
+  if (
+   Math.abs(p - lastPower) > 500 &&
+   a > 3
+) {
     return 'SHORT_CIRCUIT';
   }
   if (p > CFG.highPower) {
@@ -398,7 +403,7 @@ if (cyclingDetected) {
       kwh: data.kwh || 0,
       status: finalStatus,
       relay: data.relay ?? true,
-      pln: data.pln ?? true,
+      pln: (data.voltage || 0) > 100,
       deltaP: Number(((data.power || 0) - lastPower).toFixed(2)),
       cycling: cyclingDetected,
       cycleCount: cycleTransitions,
@@ -481,70 +486,100 @@ function updateMetricCards(data) {
     updateSparkline(key);
   });
 }
-
 function updateStatusBadge(data) {
 
   const deviceStatus = document.getElementById('statusLabel');
   const statusDot = document.getElementById('statusDot');
 
-  // ===== STATUS ESP32 =====
-  const isOffline =
-    data.status === 'OFFLINE' ||
-    data.voltage <= 0;
+  // =========================================
+  // STATUS ESP32
+  // =========================================
+  // jika API masih kirim data = ESP online
 
-  if (isOffline) {
-    deviceStatus.textContent = 'ESP32 Offline';
-    statusDot.style.background = 'red';
-  } else {
+  const espOnline =
+    data.status !== 'OFFLINE';
+
+  if (espOnline) {
+
     deviceStatus.textContent = 'ESP32 Online';
     statusDot.style.background = '#22c55e';
+
+  } else {
+
+    deviceStatus.textContent = 'ESP32 Offline';
+    statusDot.style.background = 'red';
   }
 
-  // ===== STATUS BADGE =====
-const s = data.status || 'NORMAL';
-const badge = document.getElementById('topBadge');
-const badgeText = document.getElementById('topBadgeText');
-badge.className = 'status-badge-top';
-if (s === 'WARNING') {
-  badge.classList.add('warning');
-}
-else if (s === 'HIGH_CONSUMPTION') {
-  badge.classList.add('high');
-}
-else if (s === 'SHORT_CIRCUIT') {
-  badge.classList.add('danger');
-}
-else if (s === 'CYCLING_DETECTED') {
-  badge.classList.add('warning');
-}
+  // =========================================
+  // STATUS BADGE
+  // =========================================
 
-badgeText.textContent =
-  s.replaceAll('_', ' ');
+  const s = data.status || 'NORMAL';
 
-  // ===== RELAY =====
+  const badge = document.getElementById('topBadge');
+  const badgeText = document.getElementById('topBadgeText');
+
+  badge.className = 'status-badge-top';
+
+  if (s === 'WARNING') {
+    badge.classList.add('warning');
+  }
+  else if (s === 'HIGH_CONSUMPTION') {
+    badge.classList.add('high');
+  }
+  else if (s === 'SHORT_CIRCUIT') {
+    badge.classList.add('danger');
+  }
+  else if (s === 'CYCLING_DETECTED') {
+    badge.classList.add('warning');
+  }
+  else if (s === 'OFFLINE') {
+    badge.classList.add('danger');
+  }
+
+  badgeText.textContent =
+    s.replaceAll('_', ' ');
+
+  // =========================================
+  // RELAY PROTEKSI
+  // =========================================
+
   const relayDot = document.getElementById('relayDot');
   const relayLabel = document.getElementById('relayLabel');
 
-  if (data.relay) {
-    relayDot.className = 'relay-dot on';
-    relayLabel.textContent = 'ON';
-  } else {
-    relayDot.className = 'relay-dot off';
-    relayLabel.textContent = 'OFF';
-  }
+  // relay ON = proteksi aktif
+  if (data.relay === false) {
 
-  // ===== PLN =====
+  relayDot.className = 'relay-dot on';
+  relayLabel.textContent = 'PROTECT';
+
+} else {
+
+  relayDot.className = 'relay-dot off';
+  relayLabel.textContent = 'NORMAL';
+}
+
+  // =========================================
+  // STATUS PLN
+  // =========================================
+
   const plnPill = document.getElementById('plnPill');
 
-  if (data.pln && !isOffline) {
+  // PLN hidup jika ada tegangan
+  const plnActive =
+    data.voltage > 100;
+
+  if (plnActive) {
+
     plnPill.textContent = 'PLN MENYALA';
     plnPill.className = 'pln-pill';
+
   } else {
+
     plnPill.textContent = 'PLN MATI';
     plnPill.className = 'pln-pill off';
   }
 }
-
 function updateMainChart(power) {
   if (!charts.main) return;
   const now = new Date().toLocaleTimeString('id-ID', { hour12: false });
@@ -688,19 +723,37 @@ function checkAlerts(data) {
   } else {
 
     bar.classList.remove('show');
-
-    if (s === 'NORMAL') {
-      lastLoggedStatus = '';
-    }
   }
 }
 function addLog(data) {
+
   const s = data.status;
-  if (lastLoggedStatus === s) return;
-lastLoggedStatus = s;
+
   if (!s || s === 'NORMAL' || s === 'NO_LOAD') return;
+
   const now = new Date();
+
+  // cek log terakhir
+  const lastLog = logEntries[0];
+
+  // jika status sama DAN belum 5 detik
+  if (lastLog) {
+
+    const lastTime = new Date(lastLog.rawTime || 0);
+    const diffSec =
+      (now - lastTime) / 1000;
+
+    if (
+      lastLog.status === s &&
+      diffSec < 1
+    ) {
+      return;
+    }
+  }
+
+  // simpan log baru
   logEntries.unshift({
+    rawTime: now,
     time: now.toLocaleString('id-ID'),
     status: s,
     power: data.power,
@@ -708,8 +761,13 @@ lastLoggedStatus = s;
     voltage: data.voltage,
     ai: data.ai || '—'
   });
-  if (logEntries.length > 200) logEntries.pop();
-  renderLogs('ALL');
+
+  // maksimal 200 log
+  if (logEntries.length > 200) {
+    logEntries.pop();
+  }
+
+  renderLogs(currentFilter);
 }
 
 function setEl(id, val) {
@@ -1015,7 +1073,7 @@ async function tick() {
   render(data);
 
 // realtime history page
-if (document.getElementById('page-history')?.classList.contains('active')) {
+ {
   renderLogs(currentFilter);
 
   // update chart histori realtime
