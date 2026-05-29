@@ -1,12 +1,18 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kupit_3D KWH — IoT Energy Monitor</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Kupit_3D KWH — IoT Energy Monitor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  <link rel="manifest" href="/static/manifest.json">
 </head>
 <body>
 
@@ -386,7 +392,7 @@
 
 <!-- MODAL DETAIL -->
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
-  <div class="modal-box" onclick="event.stopPropagation()"></div>
+    <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title" id="modalTitle">—</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
@@ -416,7 +422,84 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="{{ url_for('static', filename='app.js') }}?v=2"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDWESOMf_gnYD_XzD2t4idyqDYAq3U-1Rg",
+  authDomain: "deteksi-kwh.firebaseapp.com",
+  projectId: "deteksi-kwh",
+  messagingSenderId: "715684768038",
+  appId: "1:715684768038:web:6e877131cae53f7611b9e7",
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const messaging = firebase.messaging();
+
+navigator.serviceWorker.ready.then((registration) => {
+  messaging.useServiceWorker(registration);
+});
+
+if ('serviceWorker' in navigator) {
+
+  navigator.serviceWorker.register('/firebase-messaging-sw.js')
+
+  .then(async (registration) => {
+
+    console.log("Service Worker berhasil");
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === 'granted') {
+
+      const token = await messaging.getToken({
+        vapidKey: 'BBXxFuL26y3KQRdsbbZbDJQbp9xqb3DEjjampZyMiSYNchduVB9mDnl-Dfo_GSmG2chTXcAD8HjwvjA6dT5QBnA',
+        serviceWorkerRegistration: registration
+      });
+
+     console.log("FCM Token:", token);
+
+      await fetch("/save-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          token: token
+        })
+      });
+    } else {
+
+      console.log("Notif ditolak");
+
+    }
+
+  })
+
+  .catch((error) => {
+
+    console.log("SW gagal:", error);
+
+  });
+
+}
+
+messaging.onMessage((payload) => {
+
+  console.log("Pesan masuk:", payload);
+
+  new Notification(
+    payload.notification.title,
+    {
+      body: payload.notification.body,
+      icon: "/static/icon.png"
+    }
+  );
+
+});
+</script>
 </body>
 </html>
