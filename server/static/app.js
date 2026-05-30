@@ -397,12 +397,9 @@ function classifyStatus(p, a, v) {
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
   try {
-    const res = await fetch(`${BASE_URL}/api/latest`, {
+    const res = await fetch(`${BASE_URL}/api/latest?t=${Date.now()}`, {
       method: 'GET',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      cache: 'no-store'
     });
 
     if (!res.ok) {
@@ -411,38 +408,47 @@ async function fetchLatest() {
 
     const result = await res.json();
 
-    // format API railway:
-    // { success:true, data:{...} }
-    const data = result.data || result;
-    const cyclingDetected =
-  detectCycling(data.power || 0);
-    let finalStatus = classifyStatus(
-  data.power || 0,
-  data.current || 0,
-  data.voltage || 0
-);
+    if (!result) {
+      throw new Error("Response kosong");
+    }
 
-if (cyclingDetected) {
-  finalStatus = 'CYCLING_DETECTED';
-}
+    const data = result.data || result;
+
+    const power = Number(data.power || 0);
+    const current = Number(data.current || 0);
+    const voltage = Number(data.voltage || 0);
+
+    const cyclingDetected = detectCycling(power);
+
+    let finalStatus = classifyStatus(
+      power,
+      current,
+      voltage
+    );
+
+    if (cyclingDetected) {
+      finalStatus = 'CYCLING_DETECTED';
+    }
+
     return {
-      voltage: data.voltage || 0,
-      current: data.current || 0,
-      power: data.power || 0,
-      frequency: data.frequency || 0,
-      pf: data.pf || 0,
-      kwh: data.kwh || 0,
+      voltage,
+      current,
+      power,
+      frequency: Number(data.frequency || 50),
+      pf: Number(data.pf || 0),
+      kwh: Number(data.kwh || 0),
       status: finalStatus,
       relay: data.relay ?? true,
-      pln: (data.voltage || 0) > 100,
-      deltaP: Number(((data.power || 0) - lastPower).toFixed(2)),
+      pln: voltage > 100,
+      deltaP: Number((power - lastPower).toFixed(2)),
       cycling: cyclingDetected,
       cycleCount: cycleTransitions,
       cyclePeriod: data.cyclePeriod || null
     };
 
   } catch (err) {
-    console.error('API Error:', err);
+
+    console.error("FETCH ERROR:", err);
 
     return {
       voltage: 0,
@@ -451,10 +457,13 @@ if (cyclingDetected) {
       frequency: 0,
       pf: 0,
       kwh: 0,
-      status: 'OFFLINE',
+      status: 'ESP_OFFLINE',
       relay: false,
       pln: false,
-      deltaP: 0
+      deltaP: 0,
+      cycling: false,
+      cycleCount: 0,
+      cyclePeriod: null
     };
   }
 }
