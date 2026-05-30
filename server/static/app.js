@@ -728,7 +728,6 @@ if (realtimeEl) {
 }
 let lastNotifStatus = '';
 let lastNotifTime = 0;
-const alarm = new Audio('/alarm.mp3');
 
 let notifLock = false;
 
@@ -747,9 +746,9 @@ function sendNotification(title, body) {
 
     if (Notification.permission === "granted") {
 
-      new Notification(title, {
-        body: body,
-        icon: "/static/icon.jpg"
+      
+        new Notification(title, {
+        body: body
       });
 
     } else if (Notification.permission !== "denied") {
@@ -771,66 +770,61 @@ function checkAlerts(data) {
   // =========================
   if (s === 'SHORT_CIRCUIT') {
 
-  alarm.currentTime = 0;
-  if (alarm.paused) {
-  alarm.play().catch(() => {});
-}
+    msg.textContent =
+      '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis!';
 
-  msg.textContent =
-    '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis!';
+    bar.classList.add('show');
+    addLog(data);
 
-  bar.classList.add('show');
-  addLog(data);
+  }
+  else if (s === 'HIGH_CONSUMPTION') {
 
-}
-else if (s === 'HIGH_CONSUMPTION') {
+    msg.textContent =
+      '⚠ HIGH CONSUMPTION — daya melebihi batas aman!';
 
-  msg.textContent =
-    '⚠ HIGH CONSUMPTION — daya melebihi batas aman!';
+    bar.classList.add('show');
+    addLog(data);
 
-  bar.classList.add('show');
-  addLog(data);
+  }
+  else if (s === 'WARNING') {
 
-}
-else if (s === 'WARNING') {
+    msg.textContent =
+      '⚡ WARNING — daya mendekati batas aman';
 
-  msg.textContent =
-    '⚡ WARNING — daya mendekati batas aman';
+    bar.classList.add('show');
+    addLog(data);
 
-  bar.classList.add('show');
-  addLog(data);
+  }
+  else if (s === 'CYCLING_DETECTED') {
 
-}
-else if (s === 'CYCLING_DETECTED') {
+    msg.textContent =
+      '🔄 DEVICE CYCLING terdeteksi';
 
-  msg.textContent =
-    '🔄 DEVICE CYCLING terdeteksi';
+    bar.classList.add('show');
+    addLog(data);
 
-  bar.classList.add('show');
-  addLog(data);
+  }
+  else if (s === 'ESP_OFFLINE') {
 
-}
-else if (s === 'ESP_OFFLINE') {
+    msg.textContent =
+      '🔴 ESP32 OFFLINE — perangkat tidak merespon';
 
-  msg.textContent =
-    '🔴 ESP32 OFFLINE — perangkat tidak merespon';
+    bar.classList.add('show');
 
-  bar.classList.add('show');
-}
-else if (s === 'PLN_OFFLINE') {
+  }
+  else if (s === 'PLN_OFFLINE') {
 
-  msg.textContent =
-    '⚡ PLN MATI — ESP masih online';
+    msg.textContent =
+      '⚡ PLN MATI — ESP masih online';
 
-  bar.classList.add('show');
-}
-else {
+    bar.classList.add('show');
 
-  bar.classList.remove('show');
+  }
+  else {
 
-  alarm.pause();
-  alarm.currentTime = 0;
+    bar.classList.remove('show');
 
+  }
 }
   // =========================
   // BATASI NOTIF FIREBASE
@@ -882,7 +876,6 @@ if (
 
   lastNotifStatus = s;
   lastNotifTime = now;
-}
 }
 
 function addLog(data) {
