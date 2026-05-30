@@ -798,8 +798,8 @@ function sendNotification(title, body) {
 
           reg.showNotification(title, {
             body,
-            icon: '/icon.png',
-            badge: '/badge.png',
+            icon: '/static/icon.jpg',
+            badge: '/static/icon.jpg',
 
             tag: 'smartkwh-alert',
             renotify: false
