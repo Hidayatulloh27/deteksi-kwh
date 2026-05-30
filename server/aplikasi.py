@@ -1,5 +1,9 @@
 print("SERVER APP BERJALAN")
+import firebase_admin
+from flask import Flask, request, jsonify, render_template, send_from_directory
 
+from firebase_admin import credentials
+from firebase_admin import messaging
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import time
@@ -16,6 +20,12 @@ app = Flask(
     
 )
 CORS(app)
+cred = credentials.Certificate(
+    "firebase-adminsdk.json"
+)
+
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred)
 # =========================
 # FILE CSV
 # =========================
@@ -99,7 +109,10 @@ def api_update():
         data = request.json
 
         print("📥 DATA MASUK:", data)
-
+        send_fcm(
+        "⚡ SmartKWH",
+        f"Daya: {data.get('power',0)} W"
+    )
         latest_data = {
             "voltage": data.get("voltage", 0),
             "current": data.get("current", 0),
@@ -175,6 +188,73 @@ def health():
         "status": "healthy"
     })
 
+@app.route('/firebase-messaging-sw.js')
+def firebase_sw():
+    return send_from_directory(
+        app.static_folder,
+        'firebase-messaging-sw.js',
+        mimetype='application/javascript'
+    )
+
+TOKENS = []
+
+@app.route("/save-token", methods=["POST"])
+def save_token():
+
+    try:
+        data = request.get_json()
+
+        token = data.get("token")
+
+        if token and token not in TOKENS:
+            TOKENS.append(token)
+
+            print("✅ TOKEN SAVED:", token)
+
+        return jsonify({
+            "success": True
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+    
+def send_fcm(title, body):
+
+    global TOKENS
+
+    for token in TOKENS:
+
+        try:
+
+            message = messaging.Message(
+
+                notification=messaging.Notification(
+                    title=title,
+                    body=body
+                ),
+
+                token=token
+            )
+
+            response = messaging.send(message)
+
+            print("✅ FCM SENT:", response)
+
+        except Exception as e:
+
+            print("❌ FCM ERROR:", e)
+@app.route("/test-fcm")
+def test_fcm():
+
+    send_fcm(
+        "🔥 TEST",
+        "Notifikasi berhasil"
+    )
+
+    return "OK"
 # =========================
 # RUN
 # =========================
