@@ -1,57 +1,3 @@
-console.log("APP.JS BERJALAN");
-// FIREBASE
-import { initializeApp } from
-"https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-
-import {
-  getMessaging,
-  getToken,
-  onMessage
-} from
-"https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDWESOMf_gnYD_XzD2t4idyqDYAq3U-1Rg",
-  authDomain: "deteksi-kwh.firebaseapp.com",
-  projectId: "deteksi-kwh",
-  storageBucket: "deteksi-kwh.appspot.com",
-  messagingSenderId: "715684768038",
-  appId: "1:715684768038:web:6e877131cae53f7611b9e7",
-};
-
-const app = initializeApp(firebaseConfig);
-
-let messaging = null;
-
-try {
-
-  messaging = getMessaging(app);
-  console.log("Firebase Messaging OK");
-
-} catch (e) {
-
-  console.log("Firebase Messaging tidak didukung:", e);
-
-}
-// FOREGROUND MESSAGE
-// ======================================
-if (messaging) {
-
-  onMessage(messaging, (payload) => {
-
-    console.log('Message foreground:', payload);
-
-    const notifBody =
-      payload?.notification?.body ||
-      payload?.data?.body ||
-      'Notifikasi baru';
-
-    showToast(notifBody);
-
-  });
-
-}
-
 /* ── CONFIG ──────────────────────────────────────────────── */
 let BASE_URL = 'https://web-production-b1df4.up.railway.app';
 let POLL_INTERVAL = 1000;
@@ -779,7 +725,6 @@ let notifLock = false;
 
 function sendNotification(title, body) {
 
-  // anti spam notif
   if (notifLock) return;
 
   notifLock = true;
@@ -788,29 +733,22 @@ function sendNotification(title, body) {
     notifLock = false;
   }, 3000);
 
-  if (Notification.permission === 'granted') {
+  // notif browser biasa
+  if ("Notification" in window) {
 
-    navigator.serviceWorker
-      .getRegistration()
-      .then(reg => {
+    if (Notification.permission === "granted") {
 
-        if (reg) {
-
-          reg.showNotification(title, {
-            body,
-            icon: '/static/icon.jpg',
-            badge: '/static/icon.jpg',
-
-            tag: 'smartkwh-alert',
-            renotify: false
-          });
-
-        }
-
+      new Notification(title, {
+        body: body,
+        icon: "/static/icon.jpg"
       });
 
-  }
+    } else if (Notification.permission !== "denied") {
 
+      Notification.requestPermission();
+
+    }
+  }
 }
 function checkAlerts(data) {
 
@@ -1389,76 +1327,6 @@ fetch(`${BASE_URL}/api/latest`)
   .catch(err => console.log("API ERROR:", err));
 /* ── BOOT ────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
-
-  // =========================
-  // REGISTER SERVICE WORKER
-  // =========================
-  if ('serviceWorker' in navigator) {
-
-    navigator.serviceWorker.register('/static/firebase-messaging-sw.js')
-      .then(reg => {
-
-        console.log('SW registered', reg);
-
-      })
-      .catch(err => {
-
-        console.log('SW failed', err);
-
-      });
-  }
-
-  // =========================
-  // FIREBASE NOTIFICATION
-  // =========================
-  if ("Notification" in window) {
-
-    Notification.requestPermission()
-      .then(permission => {
-
-        console.log("Notif permission:", permission);
-
-        if (messaging) {
-
-          getToken(messaging, {
-            vapidKey: 'BBXxFuL26y3KQRdsbbZbDJQbp9xqb3DEjjampZyMiSYNchduVB9mDnl-Dfo_GSmG2chTXcAD8HjwvjA6dT5QBnA'
-          })
-          .then((currentToken) => {
-
-            if (currentToken) {
-
-              console.log('FCM TOKEN:', currentToken);
-
-              fetch(`${BASE_URL}/save-token`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    token: currentToken
-  })
-})
-.then(() => {
-  console.log('TOKEN SAVED');
-})
-.catch(err => {
-  console.log('SAVE TOKEN ERROR:', err);
-});
-
-            }
-
-          })
-          .catch((err) => {
-
-            console.log('FCM ERROR:', err);
-
-          });
-
-        }
-
-      });
-
-  }
 
   // =========================
   // INIT APP
