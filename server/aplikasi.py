@@ -134,10 +134,8 @@ def api_update():
         data = request.json
 
         print("📥 DATA MASUK:", data)
-        send_fcm(
-        "⚡ SmartKWH",
-        f"Daya: {data.get('power',0)} W"
-    )
+        
+    
         latest_data = {
             "voltage": data.get("voltage", 0),
             "current": data.get("current", 0),
@@ -246,17 +244,6 @@ def save_token():
             "error": str(e)
         }), 500
     
-def send_fcm(title, body):
-    print("Firebase OFF:", title, body)
-@app.route("/test-fcm")
-def test_fcm():
-
-    send_fcm(
-        "🔥 TEST",
-        "Notifikasi berhasil"
-    )
-
-    return "OK"
 # =========================
 # RUN
 # =========================
