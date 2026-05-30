@@ -6,6 +6,7 @@ from firebase_admin import messaging
 from flask_cors import CORS
 import time
 import os
+import json
 import pandas as pd
 from datetime import datetime
 
@@ -20,9 +21,11 @@ app = Flask(
 CORS(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-cred = credentials.Certificate(
-    os.path.join(BASE_DIR, "..", "firebase-key.json")
-)
+firebase_json = os.environ.get("FIREBASE_KEY")
+
+cred_dict = json.loads(firebase_json)
+
+cred = credentials.Certificate(cred_dict)
 
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
