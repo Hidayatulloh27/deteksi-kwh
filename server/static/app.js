@@ -407,8 +407,8 @@ let shortCounter = 0;
 
 function classifyStatus(p, a, v) {
  if (v <= 10) {
-    return 'OFFLINE';
-  }
+  return 'PLN_OFFLINE';
+}
 
   // Deteksi short / konslet
   const shortDetected =
@@ -582,7 +582,7 @@ function updateStatusBadge(data) {
   // jika API masih kirim data = ESP online
 
   const espOnline =
-    data.status !== 'OFFLINE';
+  data.status !== 'ESP_OFFLINE';
 
   if (espOnline) {
 
@@ -618,9 +618,12 @@ function updateStatusBadge(data) {
   else if (s === 'CYCLING_DETECTED') {
     badge.classList.add('warning');
   }
-  else if (s === 'OFFLINE') {
+  else if (s === 'ESP_OFFLINE') {
     badge.classList.add('danger');
   }
+  else if (s === 'PLN_OFFLINE') {
+  badge.classList.add('warning');
+}
 
   badgeText.textContent =
     s.replaceAll('_', ' ');
@@ -860,14 +863,19 @@ else if (s === 'CYCLING_DETECTED') {
   addLog(data);
 
 }
-else if (s === 'OFFLINE') {
+else if (s === 'ESP_OFFLINE') {
 
   msg.textContent =
     '🔴 ESP32 OFFLINE — perangkat tidak merespon';
 
   bar.classList.add('show');
-  addLog(data);
+}
+else if (s === 'PLN_OFFLINE') {
 
+  msg.textContent =
+    '⚡ PLN MATI — ESP masih online';
+
+  bar.classList.add('show');
 }
 else {
 
