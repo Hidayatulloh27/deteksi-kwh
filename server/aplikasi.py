@@ -1,10 +1,8 @@
 print("SERVER APP BERJALAN")
 import firebase_admin
 from flask import Flask, request, jsonify, render_template, send_from_directory
-
 from firebase_admin import credentials
 from firebase_admin import messaging
-from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import time
 import os
