@@ -1,0 +1,5 @@
+| timestamp | power | label      | ground_truth |
+| --------- | ----- | ---------- | ------------ |
+| 07:34     | 0     | NO_LOAD    | NORMAL       |
+| 07:35     | 280   | WASPADA    | NORMAL       |
+| 07:36     | 900   | KONSLETING | KONSLETING   |
