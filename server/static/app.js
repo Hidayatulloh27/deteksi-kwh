@@ -1,9 +1,63 @@
+console.log("APP.JS BERJALAN");
+// FIREBASE
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
+import {
+  getMessaging,
+  getToken,
+  onMessage
+} from
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDWESOMf_gnYD_XzD2t4idyqDYAq3U-1Rg",
+  authDomain: "deteksi-kwh.firebaseapp.com",
+  projectId: "deteksi-kwh",
+  storageBucket: "deteksi-kwh.appspot.com",
+  messagingSenderId: "715684768038",
+  appId: "1:715684768038:web:6e877131cae53f7611b9e7",
+};
+
+const app = initializeApp(firebaseConfig);
+
+let messaging = null;
+
+try {
+
+  messaging = getMessaging(app);
+  console.log("Firebase Messaging OK");
+
+} catch (e) {
+
+  console.log("Firebase Messaging tidak didukung:", e);
+
+}
+// FOREGROUND MESSAGE
+// ======================================
+if (messaging) {
+
+  onMessage(messaging, (payload) => {
+
+    console.log('Message foreground:', payload);
+
+    const notifBody =
+      payload?.notification?.body ||
+      payload?.data?.body ||
+      'Notifikasi baru';
+
+    showToast(notifBody);
+
+  });
+
+}
+
 /* ── CONFIG ──────────────────────────────────────────────── */
 let BASE_URL = 'https://web-production-b1df4.up.railway.app';
 let POLL_INTERVAL = 1000;
 
 const CFG = {
-  warnPower: 300, highPower: 700, shortPower: 3000,
+  warnPower: 100, highPower: 2200, shortPower: 3000,
   didtShort: 50, tw: 10, nmin: 3, don: 50, tfluk: 200
 };
 
@@ -283,14 +337,16 @@ function generateSimData() {
     const p = +raw.power.toFixed(1);
     const a = +raw.current.toFixed(3);
     const v = +raw.voltage.toFixed(1);
-    const status = classifyStatus(p, a);
+    const status = classifyStatus(p, a, v);
     return {
       voltage: v, current: a, power: p,
       frequency: +(50 + (Math.random() - 0.5) * 0.15).toFixed(2),
       pf: +(0.94 + Math.random() * 0.05).toFixed(2),
       kwh: +(0.42 + simTick * 0.00003).toFixed(4),
       status, ai: status === 'NORMAL' || status === 'NO_LOAD' ? 'AMAN' : 'WASPADA',
-      pln: true, relay: status !== 'SHORT_CIRCUIT',
+      pln: true, relay:
+      status !== 'SHORT_CIRCUIT' &&
+      status !== 'HIGH_CONSUMPTION',
       deltaP: +(p - lastPower).toFixed(2),
       cycling: b.type === 'cycling' || b.type === 'periodik',
       cycleCount: b.type === 'cycling' ? Math.floor(simTick / 40) % 10 : 0,
@@ -347,25 +403,49 @@ function detectCycling(power) {
   // minimal 3 transisi dianggap cycling
   return transitions >= 3;
 }
+let shortCounter = 0;
 
-function classifyStatus(p, a) {
+function classifyStatus(p, a, v) {
+ if (v <= 10) {
+    return 'OFFLINE';
+  }
 
-  // Deteksi lonjakan daya mendadak
-  if (
-   Math.abs(p - lastPower) > 500 &&
-   a > 3
-) {
+  // Deteksi short / konslet
+  const shortDetected =
+    p > CFG.shortPower ||
+    (
+      Math.abs(p - lastPower) > 800 &&
+      a > 5 &&
+      v < 200
+    );
+
+  // Anti false trigger
+  if (shortDetected) {
+    shortCounter++;
+  } else {
+    shortCounter = 0;
+  }
+
+  // Harus terdeteksi 2x berturut
+  if (shortCounter >= 2) {
     return 'SHORT_CIRCUIT';
   }
+
+  // Overload tinggi
   if (p > CFG.highPower) {
     return 'HIGH_CONSUMPTION';
   }
+
+  // Warning
   if (p > CFG.warnPower) {
     return 'WARNING';
   }
+
+  // Tidak ada beban
   if (p < 5 && a < 0.05) {
     return 'NO_LOAD';
   }
+
   return 'NORMAL';
 }
 /* ── FETCH / POLL ────────────────────────────────────────── */
@@ -373,6 +453,7 @@ async function fetchLatest() {
   try {
     const res = await fetch(`${BASE_URL}/api/latest`, {
       method: 'GET',
+      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json'
       }
@@ -389,7 +470,11 @@ async function fetchLatest() {
     const data = result.data || result;
     const cyclingDetected =
   detectCycling(data.power || 0);
-    let finalStatus = data.status || 'NORMAL';
+    let finalStatus = classifyStatus(
+  data.power || 0,
+  data.current || 0,
+  data.voltage || 0
+);
 
 if (cyclingDetected) {
   finalStatus = 'CYCLING_DETECTED';
@@ -550,13 +635,14 @@ function updateStatusBadge(data) {
   // relay ON = proteksi aktif
   if (data.relay === false) {
 
-  relayDot.className = 'relay-dot on';
+  relayDot.className = 'relay-dot protect';
   relayLabel.textContent = 'PROTECT';
 
 } else {
 
-  relayDot.className = 'relay-dot off';
+  relayDot.className = 'relay-dot normal';
   relayLabel.textContent = 'NORMAL';
+
 }
 
   // =========================================
@@ -682,49 +768,168 @@ if (realtimeEl) {
     trendBadge.className = 'trend-badge';
   }
 }
+let lastNotifStatus = '';
+let lastNotifTime = 0;
+const alarm = new Audio('/alarm.mp3');
+
+let notifLock = false;
+
+function sendNotification(title, body) {
+
+  // anti spam notif
+  if (notifLock) return;
+
+  notifLock = true;
+
+  setTimeout(() => {
+    notifLock = false;
+  }, 3000);
+
+  if (Notification.permission === 'granted') {
+
+    navigator.serviceWorker
+      .getRegistration()
+      .then(reg => {
+
+        if (reg) {
+
+          reg.showNotification(title, {
+            body,
+            icon: '/icon.png',
+            badge: '/badge.png',
+
+            tag: 'smartkwh-alert',
+            renotify: false
+          });
+
+        }
+
+      });
+
+  }
+
+}
 function checkAlerts(data) {
+
   const s = data.status || 'NORMAL';
 
   const bar = document.getElementById('alertBar');
   const msg = document.getElementById('alertMsg');
 
+  // =========================
+  // ALERT BAR WEBSITE
+  // =========================
   if (s === 'SHORT_CIRCUIT') {
 
-    msg.textContent =
-      '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis! dI/dt > 50 A/s';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  } else if (s === 'HIGH_CONSUMPTION') {
-
-    msg.textContent =
-      '⚠ HIGH CONSUMPTION — daya melebihi 1.800 W, periksa beban!';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  } else if (s === 'WARNING') {
-
-    msg.textContent =
-      '⚡ WARNING — daya mendekati batas aman (900–1800 W)';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  } else if (s === 'CYCLING_DETECTED') {
-
-    msg.textContent =
-      '🔄 DEVICE CYCLING terdeteksi — pola ON/OFF berulang';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  } else {
-
-    bar.classList.remove('show');
-  }
+  alarm.currentTime = 0;
+  if (alarm.paused) {
+  alarm.play().catch(() => {});
 }
+
+  msg.textContent =
+    '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis!';
+
+  bar.classList.add('show');
+  addLog(data);
+
+}
+else if (s === 'HIGH_CONSUMPTION') {
+
+  msg.textContent =
+    '⚠ HIGH CONSUMPTION — daya melebihi batas aman!';
+
+  bar.classList.add('show');
+  addLog(data);
+
+}
+else if (s === 'WARNING') {
+
+  msg.textContent =
+    '⚡ WARNING — daya mendekati batas aman';
+
+  bar.classList.add('show');
+  addLog(data);
+
+}
+else if (s === 'CYCLING_DETECTED') {
+
+  msg.textContent =
+    '🔄 DEVICE CYCLING terdeteksi';
+
+  bar.classList.add('show');
+  addLog(data);
+
+}
+else if (s === 'OFFLINE') {
+
+  msg.textContent =
+    '🔴 ESP32 OFFLINE — perangkat tidak merespon';
+
+  bar.classList.add('show');
+  addLog(data);
+
+}
+else {
+
+  bar.classList.remove('show');
+
+  alarm.pause();
+  alarm.currentTime = 0;
+
+}
+  // =========================
+  // BATASI NOTIF FIREBASE
+  // =========================
+
+  const now = Date.now();
+
+  // jangan spam notif sama
+  if (
+    s === lastNotifStatus &&
+    now - lastNotifTime < 15000
+  ) {
+    return;
+  }
+// =========================
+// KONDISI KEMBALI NORMAL
+// =========================
+
+if (
+  s === 'NORMAL' &&
+  lastNotifStatus !== 'NORMAL'
+) {
+
+  sendNotification(
+    'SmartKWH',
+    '✅ Kondisi listrik kembali normal'
+  );
+
+  lastNotifStatus = 'NORMAL';
+  lastNotifTime = now;
+
+  return;
+}
+ // =========================
+// KIRIM NOTIF BAHAYA
+// =========================
+if (
+  s === 'SHORT_CIRCUIT' ||
+  s === 'HIGH_CONSUMPTION' ||
+  s === 'WARNING' ||
+  s === 'CYCLING_DETECTED' ||
+  s === 'OFFLINE'
+) {
+
+  sendNotification(
+    'SmartKWH Alert',
+    msg.textContent
+  );
+
+  lastNotifStatus = s;
+  lastNotifTime = now;
+}
+}
+
 function addLog(data) {
 
   const s = data.status;
@@ -745,7 +950,7 @@ function addLog(data) {
 
     if (
       lastLog.status === s &&
-      diffSec < 1
+      diffSec < 5
     ) {
       return;
     }
@@ -928,7 +1133,7 @@ const avgA = currData.length
     <div class="bstat"><div class="bstat-label">Daya Min</div><div class="bstat-val">${minP} W</div></div>
     <div class="bstat"><div class="bstat-label">Arus Rata-rata</div><div class="bstat-val">${avgA} A</div></div>
     <div class="bstat"><div class="bstat-label">Tipe Beban</div><div class="bstat-val">${b.typeLabel}</div></div>
-    <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA)}</div></div>
+    <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA, 220)}</div></div>
   `;
 }
 function updateBebanRealtime() {
@@ -1070,23 +1275,24 @@ async function tick() {
   console.log("DATA API:", data);
 
   try {
+
   render(data);
 
-// realtime history page
- {
   renderLogs(currentFilter);
 
-  // update chart histori realtime
   if (charts.hist) {
+
     const now = new Date().toLocaleTimeString('id-ID', {
       hour12: false
     });
 
     if (charts.hist.data.labels.length >= 48) {
+
       charts.hist.data.labels.shift();
 
       charts.hist.data.datasets[0].data.shift();
       charts.hist.data.datasets[1].data.shift();
+
     }
 
     charts.hist.data.labels.push(now);
@@ -1095,33 +1301,64 @@ async function tick() {
     charts.hist.data.datasets[1].data.push(data.current * 100);
 
     charts.hist.update('none');
-  }
-}
 
-if (activeBeban !== null) {
-  updateBebanRealtime();
-}
   }
+
+  if (activeBeban !== null) {
+    updateBebanRealtime();
+  }
+
+}
 catch(err) {
+
   console.error("Render error:", err);
+
 }
 }
 
 /* ── SIDEBAR TOGGLE ──────────────────────────────────────── */
 function initSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  document.getElementById('mobMenu').addEventListener('click', () => {
-    sidebar.classList.toggle('open');
-  });
-  document.getElementById('sidebarToggle').addEventListener('click', () => {
-    sidebar.classList.toggle('open');
+
+  const sidebar =
+    document.getElementById('sidebar');
+
+  const mobMenu =
+    document.getElementById('mobMenu');
+
+  const sidebarToggle =
+    document.getElementById('sidebarToggle');
+
+  // tombol mobile menu
+  if (mobMenu && sidebar) {
+    mobMenu.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+    });
+  }
+
+  // tombol sidebar toggle
+  if (sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+    });
+  }
+
+  // navigation
+  const navItems =
+    document.querySelectorAll('.nav-item');
+
+  navItems.forEach(item => {
+
+    item.addEventListener('click', () => {
+
+      navigateTo(
+        item.dataset.page
+      );
+
+    });
+
   });
 
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      navigateTo(item.dataset.page);
-    });
-  });
+  console.log('Sidebar initialized');
 }
 
 /* ── SEED SOME LOGS ──────────────────────────────────────── */
@@ -1144,14 +1381,95 @@ fetch(`${BASE_URL}/api/latest`)
   .catch(err => console.log("API ERROR:", err));
 /* ── BOOT ────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
+
+  // =========================
+  // REGISTER SERVICE WORKER
+  // =========================
+  if ('serviceWorker' in navigator) {
+
+    navigator.serviceWorker.register('/static/firebase-messaging-sw.js')
+      .then(reg => {
+
+        console.log('SW registered', reg);
+
+      })
+      .catch(err => {
+
+        console.log('SW failed', err);
+
+      });
+  }
+
+  // =========================
+  // FIREBASE NOTIFICATION
+  // =========================
+  if ("Notification" in window) {
+
+    Notification.requestPermission()
+      .then(permission => {
+
+        console.log("Notif permission:", permission);
+
+        if (messaging) {
+
+          getToken(messaging, {
+            vapidKey: 'BBXxFuL26y3KQRdsbbZbDJQbp9xqb3DEjjampZyMiSYNchduVB9mDnl-Dfo_GSmG2chTXcAD8HjwvjA6dT5QBnA'
+          })
+          .then((currentToken) => {
+
+            if (currentToken) {
+
+              console.log('FCM TOKEN:', currentToken);
+
+              fetch(`${BASE_URL}/save-token`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    token: currentToken
+  })
+})
+.then(() => {
+  console.log('TOKEN SAVED');
+})
+.catch(err => {
+  console.log('SAVE TOKEN ERROR:', err);
+});
+
+            }
+
+          })
+          .catch((err) => {
+
+            console.log('FCM ERROR:', err);
+
+          });
+
+        }
+
+      });
+
+  }
+
+  // =========================
+  // INIT APP
+  // =========================
   initSidebar();
   initMainChart();
   initAllSparklines();
   initBebanPage();
+
   seedDemoLogs();
   renderLogs('ALL');
+
   setTimeout(initHistChart, 100);
 
   tick();
-  pollTimer = setInterval(tick, POLL_INTERVAL);
+
+  pollTimer = setInterval(
+    tick,
+    POLL_INTERVAL
+  );
+
 });

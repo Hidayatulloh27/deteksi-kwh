@@ -1,8 +1,8 @@
 print("SERVER APP BERJALAN")
-import firebase_admin
+#import firebase_admin
 from flask import Flask, request, jsonify, render_template, send_from_directory
-from firebase_admin import credentials
-from firebase_admin import messaging
+#from firebase_admin import credentials
+#from firebase_admin import messaging
 from flask_cors import CORS
 import time
 import os
@@ -21,15 +21,17 @@ app = Flask(
 CORS(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-firebase_json = os.environ.get("FIREBASE_KEY")
-
-cred_dict = json.loads(firebase_json)
-
-cred = credentials.Certificate(cred_dict)
-
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
 # =========================
+# FIREBASE ADMIN
+# =========================
+# firebase_json = os.environ.get("FIREBASE_KEY")
+# cred_dict = json.loads(firebase_json)
+# cred = credentials.Certificate(cred_dict)
+
+# if not firebase_admin._apps:
+#     firebase_admin.initialize_app(cred)
+
+print("⚠ Firebase sementara dimatikan")
 # FILE CSV
 # =========================
 DATA_DIR = "data"
@@ -94,12 +96,32 @@ def dashboard():
 def api_latest():
     global latest_data, last_update
 
+    # ESP benar-benar offline
     if time.time() - last_update > 10:
+
         return jsonify({
-            "status": "OFFLINE"
+            "voltage": 0,
+            "current": 0,
+            "power": 0,
+            "frequency": 0,
+            "pf": 0,
+            "kwh": 0,
+            "status": "ESP_OFFLINE",
+            "relay": False,
+            "pln": False
         })
 
-    return jsonify(latest_data)
+    # kalau data masih masuk
+    data = latest_data.copy()
+
+    # PLN mati tapi ESP masih online
+    if data.get("voltage", 0) < 10:
+        data["status"] = "PLN_OFFLINE"
+        data["pln"] = False
+    else:
+        data["pln"] = True
+
+    return jsonify(data)
 
 # =========================
 # API UPDATE
@@ -225,30 +247,7 @@ def save_token():
         }), 500
     
 def send_fcm(title, body):
-
-    global TOKENS
-
-    for token in TOKENS:
-
-        try:
-
-            message = messaging.Message(
-
-                notification=messaging.Notification(
-                    title=title,
-                    body=body
-                ),
-
-                token=token
-            )
-
-            response = messaging.send(message)
-
-            print("✅ FCM SENT:", response)
-
-        except Exception as e:
-
-            print("❌ FCM ERROR:", e)
+    print("Firebase OFF:", title, body)
 @app.route("/test-fcm")
 def test_fcm():
 
