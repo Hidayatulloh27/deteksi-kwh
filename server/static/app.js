@@ -360,15 +360,20 @@ async function fetchLatest() {
     const current = Number(data.current || 0);
     const voltage = Number(data.voltage || 0);
     const cyclingDetected = detectCycling(power);
-    let finalStatus = data.status || classifyStatus(power, current, voltage);
+    let finalStatus = classifyStatus(power, current, voltage);
     if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
+    const relayState =
+    finalStatus === 'SHORT_CIRCUIT' ||
+    finalStatus === 'HIGH_CONSUMPTION';
     return {
-      voltage, current, power,
+      voltage,
+      current,
+      power,
       frequency: Number(data.frequency || 50),
       pf: Number(data.pf || 0),
       kwh: Number(data.kwh || 0),
       status: finalStatus,
-      relay: data.relay ?? true,
+      relay: relayState,
       pln: voltage > 100,
       deltaP: Number((power - lastPower).toFixed(2)),
       cycling: cyclingDetected,
@@ -457,22 +462,20 @@ function updateStatusBadge(data) {
   const relayDot = document.getElementById('relayDot');
   const relayLabel = document.getElementById('relayLabel');
   const relayTitle = document.getElementById('relayTitle');
-  if (data.relay === false) {
+  if (data.relay === true) {
 
   relayDot.className = 'relay-dot protect';
 
-  relayLabel.textContent = 'OFF';
-
-  relayTitle.textContent = 'RELAY PUTUS';
+  relayLabel.textContent = 'PROTECT';
+  relayTitle.textContent = 'LISTRIK DIPUTUS';
 
 }
 else {
 
   relayDot.className = 'relay-dot normal';
 
-  relayLabel.textContent = 'ON';
-
-  relayTitle.textContent = 'RELAY AKTIF';
+  relayLabel.textContent = 'NORMAL';
+  relayTitle.textContent = 'LISTRIK NORMAL';
 
 }
   const plnPill = document.getElementById('plnPill');
@@ -535,13 +538,35 @@ let lastNotifTime = 0;
 let notifLock = false;
 
 function sendNotification(title, body) {
-  if (notifLock) return;
-  notifLock = true;
-  setTimeout(() => { notifLock = false; }, 3000);
-  if ("Notification" in window) {
-    if (Notification.permission === "granted") new Notification(title, { body });
-    else if (Notification.permission !== "denied") Notification.requestPermission();
-  }
+
+    if (Notification.permission === "granted") {
+
+        navigator.serviceWorker.getRegistration()
+
+        .then(reg => {
+
+            if (reg) {
+
+                reg.showNotification(title, {
+
+                    body: body,
+
+                    icon: '/static/icon.png',
+
+                    badge: '/static/icon.png',
+
+                    vibrate: [200, 100, 200],
+
+                    tag: 'smartkwh-alert'
+
+                });
+
+            }
+
+        });
+
+    }
+
 }
 
 function checkAlerts(data) {
@@ -817,15 +842,54 @@ function showBebanChart(idx) {
 
 /* ── [DIUBAH] updateBebanRealtime — update chart dari bebanStore ─ */
 function updateBebanRealtime() {
+
   if (!bebanPowerChart || !bebanCurrentChart) return;
+
   if (activeBeban === null) return;
+
   const store = getBebanStore(activeBeban);
+
+  const b = BEBAN_LIST[activeBeban];
+
+  /* update chart */
   bebanPowerChart.data.labels = [...store.labels];
   bebanPowerChart.data.datasets[0].data = [...store.power];
   bebanPowerChart.update('none');
+
   bebanCurrentChart.data.labels = [...store.labels];
   bebanCurrentChart.data.datasets[0].data = [...store.current];
   bebanCurrentChart.update('none');
+
+  /* update statistik realtime */
+  const pwrData  = store.power;
+  const currData = store.current;
+
+  const avgP = pwrData.length
+    ? (pwrData.reduce((a,v)=>a+v,0)/pwrData.length).toFixed(1)
+    : 0;
+
+  const maxP = pwrData.length
+    ? Math.max(...pwrData).toFixed(1)
+    : 0;
+
+  const minP = pwrData.length
+    ? Math.min(...pwrData).toFixed(1)
+    : 0;
+
+  const avgA = currData.length
+    ? (currData.reduce((a,v)=>a+v,0)/currData.length).toFixed(3)
+    : 0;
+
+  document.getElementById('bebanStats').innerHTML = `
+    <div class="bstat"><div class="bstat-label">Nama Alat</div><div class="bstat-val">${store.namaAlat}</div></div>
+    <div class="bstat"><div class="bstat-label">Daya Rata-rata</div><div class="bstat-val">${avgP} W</div></div>
+    <div class="bstat"><div class="bstat-label">Daya Maks</div><div class="bstat-val">${maxP} W</div></div>
+    <div class="bstat"><div class="bstat-label">Daya Min</div><div class="bstat-val">${minP} W</div></div>
+    <div class="bstat"><div class="bstat-label">Arus Rata-rata</div><div class="bstat-val">${avgA} A</div></div>
+    <div class="bstat"><div class="bstat-label">Jumlah Data</div><div class="bstat-val">${pwrData.length} titik</div></div>
+    <div class="bstat"><div class="bstat-label">Tipe Beban</div><div class="bstat-val">${b.typeLabel}</div></div>
+    <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA, 220)}</div></div>
+  `;
 }
 
 function closeBebanChart() {
@@ -910,6 +974,9 @@ function saveSettings() {
   CFG.shortPower = parseInt(document.getElementById('cfgShort').value);
   clearInterval(pollTimer);
   pollTimer = setInterval(tick, POLL_INTERVAL);
+  localStorage.setItem('warnPower', CFG.warnPower);
+  localStorage.setItem('highPower', CFG.highPower);
+  localStorage.setItem('shortPower', CFG.shortPower);
   showToast('Pengaturan disimpan');
 }
 
@@ -929,7 +996,7 @@ async function tick() {
   try {
 
     render(data);
-
+    addLog(data);
     renderLogs(currentFilter);
 
     if (charts.hist) {
@@ -1038,9 +1105,59 @@ window.addEventListener('DOMContentLoaded', () => {
   initMainChart();
   initAllSparklines();
   initBebanPage();
-  seedDemoLogs();
+  const savedWarn = localStorage.getItem('warnPower');
+const savedHigh = localStorage.getItem('highPower');
+const savedShort = localStorage.getItem('shortPower');
+
+if ('serviceWorker' in navigator) {
+
+    navigator.serviceWorker.register('/static/sw.js')
+
+    .then(reg => {
+
+        console.log('SW REGISTERED');
+
+    })
+
+    .catch(err => {
+
+        console.log('SW FAILED', err);
+
+    });
+
+}
+if (Notification.permission !== "granted") {
+
+    Notification.requestPermission()
+
+    .then(permission => {
+
+        console.log("NOTIFICATION:", permission);
+
+    });
+
+}
+
+if (savedWarn) {
+  CFG.warnPower = parseInt(savedWarn);
+  document.getElementById('cfgWarn').value = savedWarn;
+}
+
+if (savedHigh) {
+  CFG.highPower = parseInt(savedHigh);
+  document.getElementById('cfgHigh').value = savedHigh;
+}
+
+if (savedShort) {
+  CFG.shortPower = parseInt(savedShort);
+  document.getElementById('cfgShort').value = savedShort;
+}
   renderLogs('ALL');
   setTimeout(initHistChart, 100);
   tick();
   pollTimer = setInterval(tick, POLL_INTERVAL);
+  sendNotification(
+   "TEST NOTIF",
+   "Notifikasi Railway berhasil"
+);
 });
