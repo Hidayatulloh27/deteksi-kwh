@@ -74,7 +74,14 @@ latest_data = {
     "relay": False,
     "pln": False
 }
-
+# =========================
+# SETTINGS GLOBAL
+# =========================
+SETTINGS = {
+    "warnPower": 1000,
+    "highPower": 2200,
+    "shortPower": 3000
+}
 # =========================
 # HOME
 # =========================
@@ -205,6 +212,36 @@ def api_csv():
 # =========================
 # HEALTH
 # =========================
+# =========================
+# GET SETTINGS
+# =========================
+@app.route('/api/settings')
+def get_settings():
+
+    return jsonify(SETTINGS)
+
+
+# =========================
+# SAVE SETTINGS
+# =========================
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+
+    global SETTINGS
+
+    data = request.json
+
+    SETTINGS["warnPower"] = data.get("warnPower", 1000)
+    SETTINGS["highPower"] = data.get("highPower", 2200)
+    SETTINGS["shortPower"] = data.get("shortPower", 3000)
+
+    print("SETTINGS UPDATE:", SETTINGS)
+
+    return jsonify({
+        "success": True,
+        "settings": SETTINGS
+    })
+
 @app.route('/health')
 def health():
     return jsonify({
