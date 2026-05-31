@@ -570,6 +570,7 @@ function sendNotification(title, body) {
 }
 
 function checkAlerts(data) {
+  console.log("STATUS:", data.status);
   const s = data.status;
   const now = Date.now();
   if (s === lastNotifStatus && now - lastNotifTime < 15000) return;
