@@ -1126,69 +1126,45 @@ function selesaiPengujian() {
 
   showToast("Pengujian selesai");
 }
-/* ── BOOT ────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
   initSidebar();
   initMainChart();
   initAllSparklines();
   initBebanPage();
-fetch(`${BASE_URL}/api/settings`)
-.then(res => res.json())
-.then(cfg => {
 
-    CFG.warnPower = cfg.warnPower;
-    CFG.highPower = cfg.highPower;
-    CFG.shortPower = cfg.shortPower;
+  if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/sw.js')
+      .then(reg => {
+          console.log('SW REGISTERED');
+      })
+      .catch(err => {
+          console.log('SW FAILED', err);
+      });
+  }
 
-    document.getElementById('cfgWarn').value = cfg.warnPower;
-    document.getElementById('cfgHigh').value = cfg.highPower;
-    document.getElementById('cfgShort').value = cfg.shortPower;
+  if (Notification.permission !== "granted") {
+      Notification.requestPermission()
+      .then(permission => {
+          console.log("NOTIFICATION:", permission);
+      });
+  }
 
-});
+  fetch(`${BASE_URL}/api/settings`)
+    .then(res => res.json())
+    .then(cfg => {
 
-if ('serviceWorker' in navigator) {
+      CFG.warnPower = cfg.warnPower;
+      CFG.highPower = cfg.highPower;
+      CFG.shortPower = cfg.shortPower;
 
-    navigator.serviceWorker.register('/static/sw.js')
+      document.getElementById('cfgWarn').value = cfg.warnPower;
+      document.getElementById('cfgHigh').value = cfg.highPower;
+      document.getElementById('cfgShort').value = cfg.shortPower;
 
-    .then(reg => {
-
-        console.log('SW REGISTERED');
+      console.log("SETTINGS LOADED:", cfg);
 
     })
-
-    .catch(err => {
-
-        console.log('SW FAILED', err);
-
-    });
-
-}
-if (Notification.permission !== "granted") {
-
-    Notification.requestPermission()
-
-    .then(permission => {
-
-        console.log("NOTIFICATION:", permission);
-
-    });
-
-}
-
-if (savedWarn) {
-  CFG.warnPower = parseInt(savedWarn);
-  document.getElementById('cfgWarn').value = savedWarn;
-}
-
-if (savedHigh) {
-  CFG.highPower = parseInt(savedHigh);
-  document.getElementById('cfgHigh').value = savedHigh;
-}
-
-if (savedShort) {
-  CFG.shortPower = parseInt(savedShort);
-  document.getElementById('cfgShort').value = savedShort;
-}
+  .catch(err => console.error(err));
   renderLogs('ALL');
   setTimeout(initHistChart, 100);
   tick();
