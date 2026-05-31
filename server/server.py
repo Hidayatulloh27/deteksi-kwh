@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 import time
@@ -8,11 +8,13 @@ import numpy as np
 import threading
 #from ml_pipeline.retrain import start_retrain
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import firebase_admin
+#import firebase_admin
 
 from flask import send_from_directory
-from firebase_admin import credentials
-from firebase_admin import messaging
+# FIREBASE DIMATIKAN DULU
+# import firebase_admin
+# from firebase_admin import credentials
+# from firebase_admin import messaging
 from utils.helper import to_float, load_csv_safe
 from utils.notifier import kirim_notif
 from utils.ai import prediksi_besok, load_ai
@@ -26,12 +28,6 @@ app = Flask(
 )
 
 CORS(app)
-cred = credentials.Certificate(
-    "server/firebase-adminsdk.json"
-)
-
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
 
 print("🔥 SERVER VERSION BARU AKTIF")
 
@@ -382,19 +378,13 @@ def receive_data():
         if status != last_status:
             if now_time - last_notif_time > HOLD_TIME:
                 kirim_notif(pesan)
-                send_fcm(
-                "⚡ SmartKWH",
-                pesan
-            )
+               
                 last_status = status
                 last_notif_time = now_time
 
         elif now_time - last_notif_time > NOTIF_INTERVAL:
             kirim_notif(pesan)
-            send_fcm(
-                "⚡ SmartKWH",
-                pesan
-            )
+            
             last_notif_time = now_time
 
         # BONUS AI WARNING
@@ -414,35 +404,7 @@ def receive_data():
         return jsonify({"error": str(e)}), 500
 
 
-# =========================
-# SEND FCM
-# =========================
-def send_fcm(title, body):
-
-    global TOKENS
-
-    for token in TOKENS:
-
-        try:
-
-            message = messaging.Message(
-
-                notification=messaging.Notification(
-                    title=title,
-                    body=body
-                ),
-
-                token=token
-            )
-
-            response = messaging.send(message)
-
-            print("✅ FCM SENT:", response)
-
-        except Exception as e:
-
-            print("❌ FCM ERROR:", e)
-
+# =======================
 # =========================
 # CEK NO DATA
 # =========================
@@ -561,16 +523,11 @@ def save_token():
         }), 500
  # =========================
 # TEST FCM
-# =========================
-@app.route("/test-fcm")
-def test_fcm():
+# ========================
 
-    send_fcm(
-        "🔥 TEST",
-        "Notifikasi berhasil"
-    )
-
-    return "OK"   
+@app.route("/")
+def home():
+    return render_template("index.html")
 # RUN
 # =========================
 if __name__ == "__main__":

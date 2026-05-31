@@ -761,7 +761,6 @@ body {
 .start-btn:hover{
   background:rgba(0,212,170,0.2);
 }
-
 .stop-btn{
   background:rgba(239,68,68,0.12);
   border:1px solid rgba(239,68,68,0.35);
