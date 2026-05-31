@@ -551,9 +551,9 @@ function sendNotification(title, body) {
 
                     body: body,
 
-                    icon: '/static/icon.png',
+                    icon: '/static/icon1.png',
 
-                    badge: '/static/icon.png',
+                    badge: '/static/icon1.png',
 
                     vibrate: [200, 100, 200],
 
