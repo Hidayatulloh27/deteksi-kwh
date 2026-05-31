@@ -3,12 +3,12 @@ let BASE_URL = 'https://web-production-b1df4.up.railway.app';
 let POLL_INTERVAL = 1000;
 
 const CFG = {
-  warnPower: 100, highPower: 2200, shortPower: 3000,
+  warnPower: 1000, highPower: 2200, shortPower: 3000,
   didtShort: 50, tw: 10, nmin: 3, don: 50, tfluk: 200
 };
 
 /* ── DATA STORES ─────────────────────────────────────────── */
-const HISTORY_SIZE = 180; // 6 minutes at 2s intervals
+const HISTORY_SIZE = 180;
 const stores = {
   voltage:   { data: [], labels: [], unit: 'V',    name: 'Tegangan' },
   current:   { data: [], labels: [], unit: 'A',    name: 'Arus' },
@@ -24,6 +24,13 @@ let cycleHistory = [];
 let cycleTransitions = 0;
 let activeBeban = null;
 let pollTimer = null;
+let activeAlat = null;
+let testingActive = false;
+let pengujianAktif = false;
+let namaAlatAktif = "";
+
+const alatStore = {};
+
 /* ── BEBAN DEFINITIONS ───────────────────────────────────── */
 const BEBAN_LIST = [
   {
@@ -100,6 +107,73 @@ const BEBAN_LIST = [
   }
 ];
 
+/* ── PER-BEBAN ISOLATED STORE ────────────────────────────── */
+// Setiap beban punya data history & nama alat sendiri
+// Data beban lain TIDAK ikut berubah saat salah satu diuji
+const bebanStore = {};
+function getAlatStore(namaAlat) {
+
+  if (!alatStore[namaAlat]) {
+
+    alatStore[namaAlat] = {
+      power: [],
+      current: [],
+      voltage: [],
+      labels: []
+    };
+
+  }
+
+  return alatStore[namaAlat];
+}
+
+function getBebanStore(idx) {
+  if (!bebanStore[idx]) {
+    bebanStore[idx] = {
+      power:    [],
+      current:  [],
+      voltage:  [],
+      labels:   [],
+      namaAlat: BEBAN_LIST[idx].name,
+    };
+  }
+  return bebanStore[idx];
+}
+
+// Dipanggil setiap tick — hanya simpan ke beban aktif
+
+function recordToActiveBeban(data) {
+
+  if (!pengujianAktif) return;
+
+  if (activeBeban === null) return;
+
+  console.log("DATA MASUK:", data.power);
+
+  const store = getBebanStore(activeBeban);
+
+  const now = new Date().toLocaleTimeString(
+      'id-ID',
+      { hour12:false }
+  );
+
+  store.power.push(data.power);
+  store.current.push(data.current);
+  store.voltage.push(data.voltage);
+  store.labels.push(now);
+
+
+
+  if (store.power.length > 180) {
+
+      store.power.shift();
+      store.current.shift();
+      store.voltage.shift();
+      store.labels.shift();
+
+  }
+}
+
 /* ── CHART INSTANCES ─────────────────────────────────────── */
 const charts = {};
 const sparklines = {};
@@ -120,109 +194,47 @@ function chartDefaults(color = '#00d4aa') {
   };
 }
 
-function axisStyle() {
-  return {
-    x: {
-      display: false,
-      grid: { color: 'rgba(255,255,255,0.04)' }
-    },
-    y: {
-      grid: { color: 'rgba(255,255,255,0.05)' },
-      ticks: { maxTicksLimit: 4 }
-    }
-  };
-}
-
 /* ── INIT CHARTS ─────────────────────────────────────────── */
 function initMainChart() {
   const ctx = document.getElementById('mainChart').getContext('2d');
   charts.main = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Daya (W)',
-        ...chartDefaults('#00d4aa'),
-      }]
-    },
+    data: { labels: [], datasets: [{ label: 'Daya (W)', ...chartDefaults('#00d4aa') }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 200 },
       plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
       scales: {
         x: { display: false },
-        y: {
-          min: 0,
-          grid: { color: 'rgba(255,255,255,0.05)' },
-          ticks: { color: '#64748b', maxTicksLimit: 5, font: { size: 10 } }
-        }
+        y: { min: 0, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', maxTicksLimit: 5, font: { size: 10 } } }
       }
     }
   });
 }
 
 function initHistChart() {
-
   const canvas = document.getElementById('histChart');
-
-  if (!canvas) {
-    console.log("Canvas histChart tidak ditemukan");
-    return;
-  }
-
+  if (!canvas) { console.log("Canvas histChart tidak ditemukan"); return; }
   const ctx = canvas.getContext('2d');
-
   charts.hist = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
       datasets: [
-        {
-          label: 'Daya (W)',
-          ...chartDefaults('#00d4aa'),
-          data: []
-        },
-        {
-          label: 'Arus (A)×100',
-          ...chartDefaults('#3b82f6'),
-          data: []
-        }
+        { label: 'Daya (W)', ...chartDefaults('#00d4aa'), data: [] },
+        { label: 'Arus (A)×100', ...chartDefaults('#3b82f6'), data: [] }
       ]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { mode: 'index', intersect: false }
-      },
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
       scales: {
-        x: {
-          ticks: {
-            color: '#3d4a60',
-            font: { size: 9 }
-          },
-          grid: {
-            color: 'rgba(255,255,255,0.04)'
-          }
-        },
-        y: {
-          grid: {
-            color: 'rgba(255,255,255,0.05)'
-          },
-          ticks: {
-            color: '#64748b',
-            maxTicksLimit: 5
-          }
-        }
+        x: { ticks: { color: '#3d4a60', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', maxTicksLimit: 5 } }
       }
     }
   });
   console.log("Hist chart initialized");
-}
-
-function generateHistData(base = 80, variance = 60) {
-  return Array.from({ length: 48 }, () => Math.max(0, base + (Math.random() - 0.3) * variance));
 }
 
 function initSparkline(param, color = '#00d4aa') {
@@ -233,8 +245,7 @@ function initSparkline(param, color = '#00d4aa') {
     type: 'line',
     data: { labels: [], datasets: [{ ...chartDefaults(color), data: [] }] },
     options: {
-      responsive: false, maintainAspectRatio: false,
-      animation: false,
+      responsive: false, maintainAspectRatio: false, animation: false,
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
       scales: { x: { display: false }, y: { display: false } },
       elements: { point: { radius: 0 } }
@@ -290,9 +301,7 @@ function generateSimData() {
       pf: +(0.94 + Math.random() * 0.05).toFixed(2),
       kwh: +(0.42 + simTick * 0.00003).toFixed(4),
       status, ai: status === 'NORMAL' || status === 'NO_LOAD' ? 'AMAN' : 'WASPADA',
-      pln: true, relay:
-      status !== 'SHORT_CIRCUIT' &&
-      status !== 'HIGH_CONSUMPTION',
+      pln: true, relay: status !== 'SHORT_CIRCUIT' && status !== 'HIGH_CONSUMPTION',
       deltaP: +(p - lastPower).toFixed(2),
       cycling: b.type === 'cycling' || b.type === 'periodik',
       cycleCount: b.type === 'cycling' ? Math.floor(simTick / 40) % 10 : 0,
@@ -300,8 +309,6 @@ function generateSimData() {
       cycleDevice: b.type === 'cycling' || b.type === 'periodik' ? b.name : null,
     };
   }
-
-  // Idle simulation
   const p = +(14.8 + Math.sin(simTick * 0.08) * 3 + (Math.random() - 0.5) * 2).toFixed(1);
   const v = +(219.2 + (Math.random() - 0.5) * 1.5).toFixed(1);
   return {
@@ -314,126 +321,49 @@ function generateSimData() {
     cycling: false, cycleCount: 0, cyclePeriod: null, cycleDevice: null,
   };
 }
+
 function detectCycling(power) {
-
-  // simpan histori daya
   cycleHistory.push(power);
-
-  // maksimal 8 data
-  if (cycleHistory.length > 8) {
-    cycleHistory.shift();
-  }
-
-  // reset transisi
+  if (cycleHistory.length > 8) cycleHistory.shift();
   let transitions = 0;
-
-  // cek perubahan ON/OFF
   for (let i = 1; i < cycleHistory.length; i++) {
-
     const prev = cycleHistory[i - 1];
     const curr = cycleHistory[i];
-
-    // lonjakan besar
-    if (Math.abs(curr - prev) > 150) {
-      transitions++;
-    }
-
-    // perubahan ON → OFF
-    if (prev > 100 && curr < 20) {
-      transitions++;
-    }
+    if (Math.abs(curr - prev) > 150) transitions++;
+    if (prev > 100 && curr < 20) transitions++;
   }
-
   cycleTransitions = transitions;
-
-  // minimal 3 transisi dianggap cycling
   return transitions >= 3;
 }
+
 let shortCounter = 0;
-
 function classifyStatus(p, a, v) {
- if (v <= 10) {
-  return 'PLN_OFFLINE';
-}
-
-  // Deteksi short / konslet
-  const shortDetected =
-    p > CFG.shortPower ||
-    (
-      Math.abs(p - lastPower) > 800 &&
-      a > 5 &&
-      v < 200
-    );
-
-  // Anti false trigger
-  if (shortDetected) {
-    shortCounter++;
-  } else {
-    shortCounter = 0;
-  }
-
-  // Harus terdeteksi 2x berturut
-  if (shortCounter >= 2) {
-    return 'SHORT_CIRCUIT';
-  }
-
-  // Overload tinggi
-  if (p > CFG.highPower) {
-    return 'HIGH_CONSUMPTION';
-  }
-
-  // Warning
-  if (p > CFG.warnPower) {
-    return 'WARNING';
-  }
-
-  // Tidak ada beban
-  if (p < 5 && a < 0.05) {
-    return 'NO_LOAD';
-  }
-
+  if (v <= 10) return 'PLN_OFFLINE';
+  const shortDetected = p > CFG.shortPower || (Math.abs(p - lastPower) > 800 && a > 5 && v < 200);
+  if (shortDetected) shortCounter++; else shortCounter = 0;
+  if (shortCounter >= 2) return 'SHORT_CIRCUIT';
+  if (p > CFG.highPower) return 'HIGH_CONSUMPTION';
+  if (p > CFG.warnPower) return 'WARNING';
+  if (p < 5 && a < 0.05) return 'NO_LOAD';
   return 'NORMAL';
 }
+
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
   try {
-    const res = await fetch(`${BASE_URL}/api/latest?t=${Date.now()}`, {
-      method: 'GET',
-      cache: 'no-store'
-    });
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
+    const res = await fetch(`${BASE_URL}/api/latest?t=${Date.now()}`, { method: 'GET', cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const result = await res.json();
-
-    if (!result) {
-      throw new Error("Response kosong");
-    }
-
+    if (!result) throw new Error("Response kosong");
     const data = result.data || result;
-
     const power = Number(data.power || 0);
     const current = Number(data.current || 0);
     const voltage = Number(data.voltage || 0);
-
     const cyclingDetected = detectCycling(power);
-
-    let finalStatus = classifyStatus(
-      power,
-      current,
-      voltage
-    );
-
-    if (cyclingDetected) {
-      finalStatus = 'CYCLING_DETECTED';
-    }
-
+    let finalStatus = data.status || classifyStatus(power, current, voltage);
+    if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
     return {
-      voltage,
-      current,
-      power,
+      voltage, current, power,
       frequency: Number(data.frequency || 50),
       pf: Number(data.pf || 0),
       kwh: Number(data.kwh || 0),
@@ -445,26 +375,11 @@ async function fetchLatest() {
       cycleCount: cycleTransitions,
       cyclePeriod: data.cyclePeriod || null
     };
-
   } catch (err) {
-
     console.error("FETCH ERROR:", err);
-
-    return {
-      voltage: 0,
-      current: 0,
-      power: 0,
-      frequency: 0,
-      pf: 0,
-      kwh: 0,
-      status: 'ESP_OFFLINE',
-      relay: false,
-      pln: false,
-      deltaP: 0,
-      cycling: false,
-      cycleCount: 0,
-      cyclePeriod: null
-    };
+    return { voltage: 0, current: 0, power: 0, frequency: 0, pf: 0, kwh: 0,
+      status: 'ESP_OFFLINE', relay: false, pln: false, deltaP: 0,
+      cycling: false, cycleCount: 0, cyclePeriod: null };
   }
 }
 
@@ -472,14 +387,12 @@ async function fetchLatest() {
 function render(data) {
   updateTimestamp();
   updateLastUpdate();
-
   updateMetricCards(data);
   updateStatusBadge(data);
   updateMainChart(data.power);
   updateDetectionPanel(data);
   updateCostPanel(data);
   checkAlerts(data);
-
   lastPower = data.power;
 }
 
@@ -490,14 +403,13 @@ function updateTimestamp() {
   document.getElementById('tsTime').textContent =
     now.toLocaleTimeString('id-ID', { hour12: false });
 }
-/* ── UPDATE LAST UPDATE ───────────────────────────── */
-function updateLastUpdate() {
 
+function updateLastUpdate() {
   const el = document.getElementById('lastUpdate');
   if (!el) return;
-  el.textContent =
-    'Last update: ' + new Date().toLocaleTimeString();
+  el.textContent = 'Last update: ' + new Date().toLocaleTimeString();
 }
+
 function updateMetricCards(data) {
   const now = new Date().toLocaleTimeString('id-ID', { hour12: false });
   const params = [
@@ -508,12 +420,10 @@ function updateMetricCards(data) {
     { key: 'pf',        val: data.pf,        elId: 'mPF',  minId: 'mPFmin',  maxId: 'mPFmax' },
     { key: 'kwh',       val: data.kwh,       elId: 'mKwh', minId: 'mKwhmin', maxId: 'mKwhmax' },
   ];
-
   params.forEach(({ key, val, elId, minId, maxId }) => {
     pushData(key, val, now);
     const el = document.getElementById(elId);
     if (el) el.textContent = val;
-
     const s = stores[key];
     if (s.data.length > 1) {
       const mn = Math.min(...s.data).toFixed(key === 'pf' ? 2 : 1);
@@ -526,104 +436,51 @@ function updateMetricCards(data) {
     updateSparkline(key);
   });
 }
-function updateStatusBadge(data) {
 
+function updateStatusBadge(data) {
   const deviceStatus = document.getElementById('statusLabel');
   const statusDot = document.getElementById('statusDot');
-
-  // =========================================
-  // STATUS ESP32
-  // =========================================
-  // jika API masih kirim data = ESP online
-
-  const espOnline =
-  data.status !== 'ESP_OFFLINE';
-
-  if (espOnline) {
-
-    deviceStatus.textContent = 'ESP32 Online';
-    statusDot.style.background = '#22c55e';
-
-  } else {
-
-    deviceStatus.textContent = 'ESP32 Offline';
-    statusDot.style.background = 'red';
-  }
-
-  // =========================================
-  // STATUS BADGE
-  // =========================================
-
+  const espOnline = data.status !== 'ESP_OFFLINE';
+  if (espOnline) { deviceStatus.textContent = 'ESP32 Online'; statusDot.style.background = '#22c55e'; }
+  else { deviceStatus.textContent = 'ESP32 Offline'; statusDot.style.background = 'red'; }
   const s = data.status || 'NORMAL';
-
   const badge = document.getElementById('topBadge');
   const badgeText = document.getElementById('topBadgeText');
-
   badge.className = 'status-badge-top';
-
-  if (s === 'WARNING') {
-    badge.classList.add('warning');
-  }
-  else if (s === 'HIGH_CONSUMPTION') {
-    badge.classList.add('high');
-  }
-  else if (s === 'SHORT_CIRCUIT') {
-    badge.classList.add('danger');
-  }
-  else if (s === 'CYCLING_DETECTED') {
-    badge.classList.add('warning');
-  }
-  else if (s === 'ESP_OFFLINE') {
-    badge.classList.add('danger');
-  }
-  else if (s === 'PLN_OFFLINE') {
-  badge.classList.add('warning');
-}
-
-  badgeText.textContent =
-    s.replaceAll('_', ' ');
-
-  // =========================================
-  // RELAY PROTEKSI
-  // =========================================
-
+  if (s === 'WARNING') badge.classList.add('warning');
+  else if (s === 'HIGH_CONSUMPTION') badge.classList.add('high');
+  else if (s === 'SHORT_CIRCUIT') badge.classList.add('danger');
+  else if (s === 'CYCLING_DETECTED') badge.classList.add('warning');
+  else if (s === 'ESP_OFFLINE') badge.classList.add('danger');
+  else if (s === 'PLN_OFFLINE') badge.classList.add('warning');
+  badgeText.textContent = s.replaceAll('_', ' ');
   const relayDot = document.getElementById('relayDot');
   const relayLabel = document.getElementById('relayLabel');
-
-  // relay ON = proteksi aktif
+  const relayTitle = document.getElementById('relayTitle');
   if (data.relay === false) {
 
   relayDot.className = 'relay-dot protect';
-  relayLabel.textContent = 'PROTECT';
 
-} else {
+  relayLabel.textContent = 'OFF';
+
+  relayTitle.textContent = 'RELAY PUTUS';
+
+}
+else {
 
   relayDot.className = 'relay-dot normal';
-  relayLabel.textContent = 'NORMAL';
+
+  relayLabel.textContent = 'ON';
+
+  relayTitle.textContent = 'RELAY AKTIF';
 
 }
-
-  // =========================================
-  // STATUS PLN
-  // =========================================
-
   const plnPill = document.getElementById('plnPill');
-
-  // PLN hidup jika ada tegangan
-  const plnActive =
-    data.voltage > 100;
-
-  if (plnActive) {
-
-    plnPill.textContent = 'PLN MENYALA';
-    plnPill.className = 'pln-pill';
-
-  } else {
-
-    plnPill.textContent = 'PLN MATI';
-    plnPill.className = 'pln-pill off';
-  }
+  const plnActive = data.voltage > 100;
+  if (plnActive) { plnPill.textContent = 'PLN MENYALA'; plnPill.className = 'pln-pill'; }
+  else { plnPill.textContent = 'PLN MATI'; plnPill.className = 'pln-pill off'; }
 }
+
 function updateMainChart(power) {
   if (!charts.main) return;
   const now = new Date().toLocaleTimeString('id-ID', { hour12: false });
@@ -640,10 +497,7 @@ function updateMainChart(power) {
 function updateDetectionPanel(data) {
   const dp = data.deltaP || 0;
   setEl('detRule', data.status || 'NORMAL');
-  setEl(
-  'detDelta',
-  (dp >= 0 ? '+' : '') + dp.toFixed(2) + ' W/s'
-);
+  setEl('detDelta', (dp >= 0 ? '+' : '') + dp.toFixed(2) + ' W/s');
   const abnormal = Math.abs(dp) > CFG.tfluk;
   setElClass('detFluk', abnormal ? 'red' : 'green', abnormal ? 'Ya' : 'Tidak');
   setElClass('detCycle', data.cycling ? 'amber' : '', data.cycling ? 'Terdeteksi' : 'Tidak ada');
@@ -652,282 +506,78 @@ function updateDetectionPanel(data) {
 }
 
 function updateCostPanel(data) {
-
-  // Tarif PLN
   const tarif = 1444.7;
-
-  // Biaya realtime
-  const biayaPerJam =
-    (data.power / 1000) * tarif;
-
-  const biayaPerDetik =
-    biayaPerJam / 3600;
-
-  // kWh realtime dari ESP
+  const biayaPerJam = (data.power / 1000) * tarif;
+  const biayaPerDetik = biayaPerJam / 3600;
   const kwh = data.kwh || 0;
-
-  // Perhitungan biaya
   const totalBiaya = kwh * tarif;
   const bulanIni = totalBiaya * 0.3;
   const prediksi = totalBiaya * 1.2;
-
-  // Format rupiah
-  const rupiah = (n) =>
-    'Rp ' + Math.round(n).toLocaleString('id-ID');
-
-  // ===== UPDATE HTML =====
-  document.getElementById('costTotal').textContent =
-    rupiah(totalBiaya);
-
-  document.getElementById('costMonth').textContent =
-    rupiah(bulanIni);
-
-  document.getElementById('costPredict').textContent =
-    rupiah(prediksi);
-
-  // ===== REALTIME =====
+  const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+  document.getElementById('costTotal').textContent = rupiah(totalBiaya);
+  document.getElementById('costMonth').textContent = rupiah(bulanIni);
+  document.getElementById('costPredict').textContent = rupiah(prediksi);
   const realtimeEl = document.getElementById('costRealtime');
-
-if (realtimeEl) {
-  realtimeEl.textContent =
-    'Rp ' + biayaPerDetik.toFixed(6) + '/detik';
-}
-  // ===== AI CONFIDENCE =====
+  if (realtimeEl) realtimeEl.textContent = 'Rp ' + biayaPerDetik.toFixed(6) + '/detik';
   let confidence = 95;
-
-  if (data.status === 'WARNING') {
-    confidence = 75;
-  }
-
-  if (data.status === 'HIGH_CONSUMPTION') {
-    confidence = 60;
-  }
-
-  if (data.status === 'SHORT_CIRCUIT') {
-    confidence = 20;
-  }
-
-  document.getElementById('costConf').textContent =
-    confidence + '%';
-
-  // ===== TREND =====
+  if (data.status === 'WARNING') confidence = 75;
+  if (data.status === 'HIGH_CONSUMPTION') confidence = 60;
+  if (data.status === 'SHORT_CIRCUIT') confidence = 20;
+  document.getElementById('costConf').textContent = confidence + '%';
   const trendBadge = document.getElementById('trendBadge');
-
-  if (data.power > 1500) {
-    trendBadge.textContent = 'TINGGI';
-    trendBadge.className = 'trend-badge danger';
-  }
-  else if (data.power > 800) {
-    trendBadge.textContent = 'NAIK';
-    trendBadge.className = 'trend-badge warning';
-  }
-  else {
-    trendBadge.textContent = 'STABIL';
-    trendBadge.className = 'trend-badge';
-  }
+  if (data.power > 1500) { trendBadge.textContent = 'TINGGI'; trendBadge.className = 'trend-badge danger'; }
+  else if (data.power > 800) { trendBadge.textContent = 'NAIK'; trendBadge.className = 'trend-badge warning'; }
+  else { trendBadge.textContent = 'STABIL'; trendBadge.className = 'trend-badge'; }
 }
+
 let lastNotifStatus = '';
 let lastNotifTime = 0;
-
 let notifLock = false;
 
 function sendNotification(title, body) {
-
   if (notifLock) return;
-
   notifLock = true;
-
-  setTimeout(() => {
-    notifLock = false;
-  }, 3000);
-
-  // notif browser biasa
+  setTimeout(() => { notifLock = false; }, 3000);
   if ("Notification" in window) {
-
-    if (Notification.permission === "granted") {
-
-      
-        new Notification(title, {
-        body: body
-      });
-
-    } else if (Notification.permission !== "denied") {
-
-      Notification.requestPermission();
-
-    }
+    if (Notification.permission === "granted") new Notification(title, { body });
+    else if (Notification.permission !== "denied") Notification.requestPermission();
   }
 }
+
 function checkAlerts(data) {
-
-  const s = data.status || 'NORMAL';
-
-  const bar = document.getElementById('alertBar');
-  const msg = document.getElementById('alertMsg');
-
-  // =========================
-  // ALERT BAR WEBSITE
-  // =========================
-  if (s === 'SHORT_CIRCUIT') {
-
-    msg.textContent =
-      '⚡ SHORT CIRCUIT terdeteksi — relay diputus otomatis!';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  }
-  else if (s === 'HIGH_CONSUMPTION') {
-
-    msg.textContent =
-      '⚠ HIGH CONSUMPTION — daya melebihi batas aman!';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  }
-  else if (s === 'WARNING') {
-
-    msg.textContent =
-      '⚡ WARNING — daya mendekati batas aman';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  }
-  else if (s === 'CYCLING_DETECTED') {
-
-    msg.textContent =
-      '🔄 DEVICE CYCLING terdeteksi';
-
-    bar.classList.add('show');
-    addLog(data);
-
-  }
-  else if (s === 'ESP_OFFLINE') {
-
-    msg.textContent =
-      '🔴 ESP32 OFFLINE — perangkat tidak merespon';
-
-    bar.classList.add('show');
-
-  }
-  else if (s === 'PLN_OFFLINE') {
-
-    msg.textContent =
-      '⚡ PLN MATI — ESP masih online';
-
-    bar.classList.add('show');
-
-  }
-  else {
-
-    bar.classList.remove('show');
-
-  }
-}
-  // =========================
-  // BATASI NOTIF FIREBASE
-  // =========================
-
+  const s = data.status;
   const now = Date.now();
-
-  // jangan spam notif sama
-  if (
-    s === lastNotifStatus &&
-    now - lastNotifTime < 15000
-  ) {
-    return;
+  if (s === lastNotifStatus && now - lastNotifTime < 15000) return;
+  if (s === 'NORMAL' && lastNotifStatus !== 'NORMAL') {
+    sendNotification('SmartKWH', '✅ Kondisi listrik kembali normal');
+    lastNotifStatus = 'NORMAL'; lastNotifTime = now; return;
   }
-// =========================
-// KONDISI KEMBALI NORMAL
-// =========================
-
-if (
-  s === 'NORMAL' &&
-  lastNotifStatus !== 'NORMAL'
-) {
-
-  sendNotification(
-    'SmartKWH',
-    '✅ Kondisi listrik kembali normal'
-  );
-
-  lastNotifStatus = 'NORMAL';
-  lastNotifTime = now;
-
-  return;
-}
- // =========================
-// KIRIM NOTIF BAHAYA
-// =========================
-if (
-  s === 'SHORT_CIRCUIT' ||
-  s === 'HIGH_CONSUMPTION' ||
-  s === 'WARNING' ||
-  s === 'CYCLING_DETECTED' ||
-  s === 'OFFLINE'
-) {
-
-  sendNotification(
-    'SmartKWH Alert',
-    msg.textContent
-  );
-
-  lastNotifStatus = s;
-  lastNotifTime = now;
+  if (['SHORT_CIRCUIT','HIGH_CONSUMPTION','WARNING','CYCLING_DETECTED','ESP_OFFLINE','PLN_OFFLINE'].includes(s)) {
+    sendNotification('SmartKWH Alert', s.replaceAll('_', ' '));
+    lastNotifStatus = s; lastNotifTime = now;
+  }
 }
 
 function addLog(data) {
-
   const s = data.status;
-
   if (!s || s === 'NORMAL' || s === 'NO_LOAD') return;
-
   const now = new Date();
-
-  // cek log terakhir
   const lastLog = logEntries[0];
-
-  // jika status sama DAN belum 5 detik
   if (lastLog) {
-
     const lastTime = new Date(lastLog.rawTime || 0);
-    const diffSec =
-      (now - lastTime) / 1000;
-
-    if (
-      lastLog.status === s &&
-      diffSec < 5
-    ) {
-      return;
-    }
+    const diffSec = (now - lastTime) / 1000;
+    if (lastLog.status === s && diffSec < 5) return;
   }
-
-  // simpan log baru
   logEntries.unshift({
-    rawTime: now,
-    time: now.toLocaleString('id-ID'),
-    status: s,
-    power: data.power,
-    current: data.current,
-    voltage: data.voltage,
-    ai: data.ai || '—'
+    rawTime: now, time: now.toLocaleString('id-ID'),
+    status: s, power: data.power, current: data.current,
+    voltage: data.voltage, ai: data.ai || '—'
   });
-
-  // maksimal 200 log
-  if (logEntries.length > 200) {
-    logEntries.pop();
-  }
-
+  if (logEntries.length > 200) logEntries.pop();
   renderLogs(currentFilter);
 }
 
-function setEl(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
-
+function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 function setElClass(id, cls, val) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -947,12 +597,9 @@ function renderLogs(filter) {
     <tr>
       <td>${l.time}</td>
       <td><span class="cond-pill cond-${l.status}">${l.status.replace('_', ' ')}</span></td>
-      <td>${l.power}</td>
-      <td>${l.current}</td>
-      <td>${l.voltage}</td>
-      <td>${l.ai}</td>
-    </tr>
-  `).join('') : `<tr><td colspan="6" style="text-align:center;color:#3d4a60;padding:20px">Belum ada data</td></tr>`;
+      <td>${l.power}</td><td>${l.current}</td><td>${l.voltage}</td><td>${l.ai}</td>
+    </tr>`).join('') :
+    `<tr><td colspan="6" style="text-align:center;color:#3d4a60;padding:20px">Belum ada data</td></tr>`;
 }
 
 function filterLogs(btn, filter) {
@@ -965,18 +612,27 @@ function filterLogs(btn, filter) {
 let bebanPowerChart = null;
 let bebanCurrentChart = null;
 
+/* ── [DIUBAH] initBebanPage — tampilkan nama custom jika ada ─ */
 function initBebanPage() {
   const grid = document.getElementById('bebanGrid');
   if (!grid) return;
   grid.innerHTML = BEBAN_LIST.map((b, i) => {
     const pPct = Math.min(100, (b.nominalPower / 500) * 100);
     const aPct = Math.min(100, (b.nominalCurrent / 3) * 100);
+    const store = getBebanStore(i);
+    const namaCustom = store.namaAlat !== b.name
+      ? `<div class="beban-nama-custom">${store.namaAlat}</div>` : '';
+    const hasData = store.power.length > 0;
+    const dataBadge = hasData
+      ? `<span class="beban-data-badge">${store.power.length} data</span>` : '';
     return `
       <div class="beban-card" id="beban-card-${i}" onclick="selectBeban(${i})">
         <span class="beban-type-badge type-${b.type}">${b.typeLabel}</span>
+        ${dataBadge}
         <div class="beban-num">BEBAN ${b.id}</div>
         <div class="beban-icon">${b.icon}</div>
         <div class="beban-name">${b.name}</div>
+        ${namaCustom}
         <div class="beban-spec">${b.spec}</div>
         <div class="beban-bars">
           <div class="beban-bar-row">
@@ -990,49 +646,135 @@ function initBebanPage() {
             <span class="beban-bar-val">${b.nominalCurrent}A</span>
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
+/* ── [DIUBAH] selectBeban — set nama alat, gunakan data isolated ─ */
 function selectBeban(idx) {
   document.querySelectorAll('.beban-card').forEach(c => c.classList.remove('active-beban'));
   const card = document.getElementById(`beban-card-${idx}`);
   if (card) card.classList.add('active-beban');
-
   activeBeban = idx;
+
+  // Tampilkan input nama alat
+  showNamaInput(idx);
   showBebanChart(idx);
-  updateBebanRealtime();
-  showToast(`Simulasi Beban ${idx + 1}: ${BEBAN_LIST[idx].name} diaktifkan`);
+  showToast(`Beban ${idx + 1}: ${BEBAN_LIST[idx].name} — data monitoring dimulai`);
 }
 
+function mulaiPengujian() {
+
+  const nama = document
+      .getElementById("namaAlatInput")
+      .value
+      .trim();
+
+  if (!nama) {
+      alert("Masukkan nama alat terlebih dahulu!");
+      return;
+  }
+
+  namaAlatAktif = nama;
+
+  activeAlat = nama;
+  testingActive = true;
+
+  pengujianAktif = true;
+
+  if (activeBeban !== null) {
+      getBebanStore(activeBeban).namaAlat = nama;
+  }
+
+  showToast("Pengujian dimulai: " + nama);
+}
+/* ── [BARU] Input nama alat custom ──────────────────────── */
+function showNamaInput(idx) {
+  const existing = document.getElementById('namaAlatPanel');
+  if (existing) existing.remove();
+
+  const store = getBebanStore(idx);
+  const b = BEBAN_LIST[idx];
+
+  const panel = document.createElement('div');
+  panel.id = 'namaAlatPanel';
+  panel.style.cssText = `
+    background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;
+    gap:12px;flex-wrap:wrap;
+  `;
+  panel.innerHTML = `
+    <span style="font-size:12px;color:var(--text2);font-family:var(--font-mono);">
+      Nama alat yang diuji (Beban ${b.id}):
+    </span>
+    <input id="namaAlatInput" type="text" placeholder="contoh: Kipas Angin Cosmos"
+      value="${store.namaAlat}"
+      style="flex:1;min-width:180px;padding:7px 12px;background:var(--bg3);
+             border:1px solid var(--border2);border-radius:var(--radius-xs);
+             color:var(--text0);font-family:var(--font-mono);font-size:13px;
+             outline:none;" />
+    <button onclick="mulaiPengujian(); simpanNamaAlat(${idx})"
+      style="padding:7px 16px;background:var(--accent-dim);border:1px solid var(--accent-glow);
+             color:var(--accent);border-radius:var(--radius-xs);font-size:12px;
+             font-weight:700;cursor:pointer;white-space:nowrap;">
+      Simpan Nama
+    </button>
+    <button onclick="clearBebanData(${idx})"
+      style="padding:7px 12px;background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);
+             color:var(--red);border-radius:var(--radius-xs);font-size:12px;
+             font-weight:700;cursor:pointer;">
+      Reset Data
+    </button>`;
+
+  const grid = document.getElementById('bebanGrid');
+  grid.parentNode.insertBefore(panel, grid.nextSibling);
+}
+
+function simpanNamaAlat(idx) {
+  const input = document.getElementById('namaAlatInput');
+  if (!input) return;
+  const nama = input.value.trim() || BEBAN_LIST[idx].name;
+  getBebanStore(idx).namaAlat = nama;
+  showToast(`Nama alat disimpan: ${nama}`);
+  initBebanPage(); // refresh kartu
+  selectBeban(idx); // pilih lagi agar panel tetap terbuka
+}
+
+function clearBebanData(idx) {
+  const store = getBebanStore(idx);
+  store.power = []; store.current = [];
+  store.voltage = []; store.labels = [];
+  showToast(`Data Beban ${idx+1} direset`);
+  showBebanChart(idx);
+  initBebanPage();
+}
+
+/* ── [DIUBAH] showBebanChart — baca dari bebanStore[idx] ─── */
 function showBebanChart(idx) {
   const b = BEBAN_LIST[idx];
   const panel = document.getElementById('bebanChartPanel');
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  document.getElementById('bebanChartTitle').textContent = `Beban ${b.id} — ${b.name} · Historis Pengujian`;
+  const store = getBebanStore(idx);
+  const namaLabel = store.namaAlat !== b.name ? ` (${store.namaAlat})` : '';
+  document.getElementById('bebanChartTitle').textContent =
+    `Beban ${b.id} — ${b.name}${namaLabel} · Data Pengujian`;
 
-  // Data realtime dari monitoring utama
-const pwrData = stores.power.data.slice(-60);
-const currData = stores.current.data.slice(-60);
-const labels = stores.power.labels.slice(-60);
+  // Ambil data dari store beban ini — BUKAN dari stores global
+  const pwrData  = [...store.power];
+  const currData = [...store.current];
+  const labels   = [...store.labels];
 
-  // Power chart
   if (bebanPowerChart) bebanPowerChart.destroy();
   const pCtx = document.getElementById('bebanPowerChart').getContext('2d');
   bebanPowerChart = new Chart(pCtx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{ label: 'Daya (W)', ...chartDefaults(b.color), data: pwrData }]
-    },
+    data: { labels, datasets: [{ label: 'Daya (W)', ...chartDefaults(b.color), data: pwrData }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false },
-        title: { display: true, text: 'Daya (W)', color: '#94a3b8', font: { size: 11 } }
-      },
+        title: { display: true, text: 'Daya (W)', color: '#94a3b8', font: { size: 11 } } },
       scales: {
         x: { ticks: { color: '#3d4a60' }, grid: { color: 'rgba(255,255,255,0.04)' } },
         y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b' } }
@@ -1040,20 +782,15 @@ const labels = stores.power.labels.slice(-60);
     }
   });
 
-  // Current chart
   if (bebanCurrentChart) bebanCurrentChart.destroy();
   const cCtx = document.getElementById('bebanCurrentChart').getContext('2d');
   bebanCurrentChart = new Chart(cCtx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{ label: 'Arus (A)', ...chartDefaults('#3b82f6'), data: currData }]
-    },
+    data: { labels, datasets: [{ label: 'Arus (A)', ...chartDefaults('#3b82f6'), data: currData }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false },
-        title: { display: true, text: 'Arus (A)', color: '#94a3b8', font: { size: 11 } }
-      },
+        title: { display: true, text: 'Arus (A)', color: '#94a3b8', font: { size: 11 } } },
       scales: {
         x: { ticks: { color: '#3d4a60' }, grid: { color: 'rgba(255,255,255,0.04)' } },
         y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b' } }
@@ -1061,52 +798,43 @@ const labels = stores.power.labels.slice(-60);
     }
   });
 
-  // Stats
-  const avgP = pwrData.length
-  ? (pwrData.reduce((a, b) => a + b, 0) / pwrData.length).toFixed(1)
-  : 0;
- const maxP = pwrData.length
-  ? Math.max(...pwrData).toFixed(1)
-  : 0;
-const minP = pwrData.length
-  ? Math.min(...pwrData).toFixed(1)
-  : 0;
-const avgA = currData.length
-  ? (currData.reduce((a, b) => a + b, 0) / currData.length).toFixed(3)
-  : 0;
+  // Stats dari data beban ini saja
+  const avgP = pwrData.length ? (pwrData.reduce((a,v)=>a+v,0)/pwrData.length).toFixed(1) : 0;
+  const maxP = pwrData.length ? Math.max(...pwrData).toFixed(1) : 0;
+  const minP = pwrData.length ? Math.min(...pwrData).toFixed(1) : 0;
+  const avgA = currData.length ? (currData.reduce((a,v)=>a+v,0)/currData.length).toFixed(3) : 0;
 
   document.getElementById('bebanStats').innerHTML = `
+    <div class="bstat"><div class="bstat-label">Nama Alat</div><div class="bstat-val">${store.namaAlat}</div></div>
     <div class="bstat"><div class="bstat-label">Daya Rata-rata</div><div class="bstat-val">${avgP} W</div></div>
     <div class="bstat"><div class="bstat-label">Daya Maks</div><div class="bstat-val">${maxP} W</div></div>
     <div class="bstat"><div class="bstat-label">Daya Min</div><div class="bstat-val">${minP} W</div></div>
     <div class="bstat"><div class="bstat-label">Arus Rata-rata</div><div class="bstat-val">${avgA} A</div></div>
+    <div class="bstat"><div class="bstat-label">Jumlah Data</div><div class="bstat-val">${pwrData.length} titik</div></div>
     <div class="bstat"><div class="bstat-label">Tipe Beban</div><div class="bstat-val">${b.typeLabel}</div></div>
-    <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA, 220)}</div></div>
-  `;
+    <div class="bstat"><div class="bstat-label">Kondisi</div><div class="bstat-val">${classifyStatus(+avgP, +avgA, 220)}</div></div>`;
 }
+
+/* ── [DIUBAH] updateBebanRealtime — update chart dari bebanStore ─ */
 function updateBebanRealtime() {
-
   if (!bebanPowerChart || !bebanCurrentChart) return;
-
-  const pwrData = stores.power.data.slice(-60);
-  const currData = stores.current.data.slice(-60);
-  const labels = stores.power.labels.slice(-60);
-
-  // update chart daya
-  bebanPowerChart.data.labels = labels;
-  bebanPowerChart.data.datasets[0].data = pwrData;
+  if (activeBeban === null) return;
+  const store = getBebanStore(activeBeban);
+  bebanPowerChart.data.labels = [...store.labels];
+  bebanPowerChart.data.datasets[0].data = [...store.power];
   bebanPowerChart.update('none');
-
-  // update chart arus
-  bebanCurrentChart.data.labels = labels;
-  bebanCurrentChart.data.datasets[0].data = currData;
+  bebanCurrentChart.data.labels = [...store.labels];
+  bebanCurrentChart.data.datasets[0].data = [...store.current];
   bebanCurrentChart.update('none');
 }
+
 function closeBebanChart() {
   document.getElementById('bebanChartPanel').style.display = 'none';
   document.querySelectorAll('.beban-card').forEach(c => c.classList.remove('active-beban'));
+  const namaPanel = document.getElementById('namaAlatPanel');
+  if (namaPanel) namaPanel.remove();
   activeBeban = null;
-  showToast('Simulasi beban dihentikan — kembali ke data idle');
+  showToast('Pengujian beban dihentikan');
 }
 
 /* ── MODAL ───────────────────────────────────────────────── */
@@ -1115,11 +843,9 @@ let modalChart = null;
 function openModal(param) {
   const s = stores[param];
   if (!s) return;
-
   document.getElementById('modalTitle').textContent = s.name;
   document.getElementById('modalBigVal').textContent = s.data.length ? s.data[s.data.length - 1] : '—';
   document.getElementById('modalBigUnit').textContent = s.unit;
-
   if (s.data.length > 0) {
     const mn = Math.min(...s.data);
     const mx = Math.max(...s.data);
@@ -1129,16 +855,11 @@ function openModal(param) {
     document.getElementById('modalAvg').textContent = avg;
     document.getElementById('modalLast').textContent = s.data[s.data.length - 1];
   }
-
-  // Modal chart
   if (modalChart) modalChart.destroy();
   const ctx = document.getElementById('modalChart').getContext('2d');
   modalChart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: s.labels,
-      datasets: [{ label: s.name, ...chartDefaults(spkColors[param] || '#00d4aa'), data: [...s.data] }]
-    },
+    data: { labels: s.labels, datasets: [{ label: s.name, ...chartDefaults(spkColors[param] || '#00d4aa'), data: [...s.data] }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
@@ -1148,13 +869,10 @@ function openModal(param) {
       }
     }
   });
-
-  // Table: last 30 entries
   const tbody = document.getElementById('modalTableBody');
   const last30 = s.data.slice(-30).reverse();
   const last30L = s.labels.slice(-30).reverse();
   tbody.innerHTML = last30.map((v, i) => `<tr><td>${last30L[i]}</td><td>${v} ${s.unit}</td></tr>`).join('');
-
   document.getElementById('modalOverlay').classList.add('open');
 }
 
@@ -1164,12 +882,7 @@ function closeModal() {
 }
 
 /* ── PAGE NAVIGATION ─────────────────────────────────────── */
-const pageTitles = {
-  dashboard: 'Dashboard',
-  beban: 'Pengujian Beban',
-  history: 'Riwayat Kejadian',
-  settings: 'Pengaturan',
-};
+const pageTitles = { dashboard: 'Dashboard', beban: 'Pengujian Beban', history: 'Riwayat Kejadian', settings: 'Pengaturan' };
 
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1179,23 +892,16 @@ function navigateTo(page) {
   const navEl = document.querySelector(`[data-page="${page}"]`);
   if (navEl) navEl.classList.add('active');
   document.getElementById('pageTitle').textContent = pageTitles[page] || page;
-
   if (page === 'history') renderLogs(currentFilter);
   if (page === 'beban') initBebanPage();
-
-  // Close sidebar on mobile
-  if (window.innerWidth <= 900) {
-    document.getElementById('sidebar').classList.remove('open');
-  }
+  if (window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open');
 }
 
-/* ── CHART RANGE ─────────────────────────────────────────── */
 function setChartRange(btn, range) {
   document.querySelectorAll('.toggle-group .tgl').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
 
-/* ── SETTINGS ────────────────────────────────────────────── */
 function saveSettings() {
   BASE_URL = document.getElementById('cfgUrl').value;
   POLL_INTERVAL = parseInt(document.getElementById('cfgInterval').value) * 1000;
@@ -1207,7 +913,6 @@ function saveSettings() {
   showToast('Pengaturan disimpan');
 }
 
-/* ── TOAST ───────────────────────────────────────────────── */
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1217,99 +922,67 @@ function showToast(msg) {
 
 /* ── MAIN LOOP ───────────────────────────────────────────── */
 async function tick() {
-
   const data = await fetchLatest();
-
-  console.log("DATA API:", data);
+  console.log("RELAY STATUS:", data.relay);
+  recordToActiveBeban(data);
 
   try {
 
-  render(data);
+    render(data);
 
-  renderLogs(currentFilter);
+    renderLogs(currentFilter);
 
-  if (charts.hist) {
+    if (charts.hist) {
 
-    const now = new Date().toLocaleTimeString('id-ID', {
-      hour12: false
-    });
+      const now = new Date().toLocaleTimeString(
+        'id-ID',
+        { hour12:false }
+      );
 
-    if (charts.hist.data.labels.length >= 48) {
+      if (charts.hist.data.labels.length >= 48) {
 
-      charts.hist.data.labels.shift();
+        charts.hist.data.labels.shift();
+        charts.hist.data.datasets[0].data.shift();
+        charts.hist.data.datasets[1].data.shift();
 
-      charts.hist.data.datasets[0].data.shift();
-      charts.hist.data.datasets[1].data.shift();
+      }
+
+      charts.hist.data.labels.push(now);
+
+      charts.hist.data.datasets[0].data.push(data.power);
+
+      charts.hist.data.datasets[1].data.push(data.current * 100);
+
+      charts.hist.update('none');
 
     }
 
-    charts.hist.data.labels.push(now);
+    if (activeBeban !== null) {
 
-    charts.hist.data.datasets[0].data.push(data.power);
-    charts.hist.data.datasets[1].data.push(data.current * 100);
+      updateBebanRealtime();
 
-    charts.hist.update('none');
+    }
+
+  } catch(err) {
+
+    console.error("Render error:", err);
 
   }
 
-  if (activeBeban !== null) {
-    updateBebanRealtime();
-  }
-
-}
-catch(err) {
-
-  console.error("Render error:", err);
-
-}
 }
 
-/* ── SIDEBAR TOGGLE ──────────────────────────────────────── */
+/* ── SIDEBAR ─────────────────────────────────────────────── */
 function initSidebar() {
-
-  const sidebar =
-    document.getElementById('sidebar');
-
-  const mobMenu =
-    document.getElementById('mobMenu');
-
-  const sidebarToggle =
-    document.getElementById('sidebarToggle');
-
-  // tombol mobile menu
-  if (mobMenu && sidebar) {
-    mobMenu.addEventListener('click', () => {
-      sidebar.classList.toggle('open');
-    });
-  }
-
-  // tombol sidebar toggle
-  if (sidebarToggle && sidebar) {
-    sidebarToggle.addEventListener('click', () => {
-      sidebar.classList.toggle('open');
-    });
-  }
-
-  // navigation
-  const navItems =
-    document.querySelectorAll('.nav-item');
-
-  navItems.forEach(item => {
-
-    item.addEventListener('click', () => {
-
-      navigateTo(
-        item.dataset.page
-      );
-
-    });
-
+  const sidebar = document.getElementById('sidebar');
+  const mobMenu = document.getElementById('mobMenu');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  if (mobMenu && sidebar) mobMenu.addEventListener('click', () => sidebar.classList.toggle('open'));
+  if (sidebarToggle && sidebar) sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => navigateTo(item.dataset.page));
   });
-
-  console.log('Sidebar initialized');
 }
 
-/* ── SEED SOME LOGS ──────────────────────────────────────── */
 function seedDemoLogs() {
   const now = new Date();
   const demoLogs = [
@@ -1322,32 +995,52 @@ function seedDemoLogs() {
     logEntries.push({ ...l, time: t.toLocaleString('id-ID') });
   });
 }
-// TEST API
+
 fetch(`${BASE_URL}/api/latest`)
   .then(res => res.json())
   .then(data => console.log("API CONNECT:", data))
   .catch(err => console.log("API ERROR:", err));
+
+  function mulaiPengujian() {
+
+  const nama = document
+      .getElementById("namaAlatInput")
+      .value
+      .trim();
+
+  if (!nama) {
+      alert("Masukkan nama alat terlebih dahulu!");
+      return;
+  }
+
+  namaAlatAktif = nama;
+  pengujianAktif = true;
+
+  if (activeBeban !== null) {
+      getBebanStore(activeBeban).namaAlat = nama;
+  }
+
+  showToast("Pengujian dimulai: " + nama);
+}
+
+function selesaiPengujian() {
+
+  pengujianAktif = false;
+
+  testingActive = false;
+  activeAlat = null;
+
+  showToast("Pengujian selesai");
+}
 /* ── BOOT ────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
-
-  // =========================
-  // INIT APP
-  // =========================
   initSidebar();
   initMainChart();
   initAllSparklines();
   initBebanPage();
-
   seedDemoLogs();
   renderLogs('ALL');
-
   setTimeout(initHistChart, 100);
-
   tick();
-
-  pollTimer = setInterval(
-    tick,
-    POLL_INTERVAL
-  );
-
+  pollTimer = setInterval(tick, POLL_INTERVAL);
 });

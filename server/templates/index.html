@@ -80,9 +80,11 @@
         <span id="topBadgeText">NORMAL</span>
       </div>
       <div class="relay-indicator" id="relayIndicator">
-        <span>RELAY</span>
-        <span class="relay-dot on" id="relayDot"></span>
-        <span id="relayLabel">ON</span>
+    <span id="relayTitle">RELAY AKTIF</span>
+    <span class="relay-dot normal" id="relayDot"></span>
+    <span id="relayLabel">ON</span>
+</div>
+      </div>
       </div>
       <div id="lastUpdate" class="last-update">
   Last update: --:--:--
@@ -302,6 +304,22 @@
       <h2 class="section-heading">Pengujian Beban Listrik</h2>
       <p class="section-sub">Enam perangkat uji representatif — klik kartu untuk aktifkan simulasi beban dan lihat grafik historis respons sistem.</p>
     </div>
+    <div class="alat-test-panel">
+
+  <input
+      type="text"
+      id="namaAlatInput"
+      placeholder="Masukkan nama alat yang diuji">
+
+  <button onclick="mulaiPengujian()">
+      Mulai Pengujian
+  </button>
+
+  <button onclick="selesaiPengujian()">
+      Selesai Pengujian
+  </button>
+
+</div>
     <div class="beban-grid" id="bebanGrid">
       <!-- Cards injected by JS -->
     </div>
@@ -421,6 +439,7 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
