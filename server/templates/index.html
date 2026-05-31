@@ -390,7 +390,9 @@
           <label>Polling Interval (detik)</label>
           <input type="number" id="cfgInterval" value="2" min="1" max="60">
         </div>
-        <button class="save-btn" onclick="saveSettings()">Simpan Pengaturan</button>
+        <button class="save-btn" onclick="saveSettings(); console.log('BUTTON CLICK')">
+    Simpan Pengaturan
+</button>
       </div>
       <div class="settings-card">
         <div class="settings-title">Ambang Batas Deteksi</div>
