@@ -966,18 +966,45 @@ function setChartRange(btn, range) {
   btn.classList.add('active');
 }
 
-function saveSettings() {
+async function saveSettings() {
+  console.log("TOMBOL SIMPAN DIKLIK");
   BASE_URL = document.getElementById('cfgUrl').value;
   POLL_INTERVAL = parseInt(document.getElementById('cfgInterval').value) * 1000;
-  CFG.warnPower = parseInt(document.getElementById('cfgWarn').value);
-  CFG.highPower = parseInt(document.getElementById('cfgHigh').value);
+
+  CFG.warnPower  = parseInt(document.getElementById('cfgWarn').value);
+  CFG.highPower  = parseInt(document.getElementById('cfgHigh').value);
   CFG.shortPower = parseInt(document.getElementById('cfgShort').value);
+
   clearInterval(pollTimer);
   pollTimer = setInterval(tick, POLL_INTERVAL);
-  localStorage.setItem('warnPower', CFG.warnPower);
-  localStorage.setItem('highPower', CFG.highPower);
-  localStorage.setItem('shortPower', CFG.shortPower);
-  showToast('Pengaturan disimpan');
+
+  try {
+
+    const res = await fetch(`${BASE_URL}/api/settings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        warnPower: CFG.warnPower,
+        highPower: CFG.highPower,
+        shortPower: CFG.shortPower
+      })
+    });
+
+    const result = await res.json();
+
+    console.log("SETTINGS SAVED:", result);
+
+    showToast("Pengaturan tersimpan ke server");
+
+  } catch(err) {
+
+    console.error(err);
+
+    showToast("Gagal simpan ke server");
+
+  }
 }
 
 function showToast(msg) {
@@ -1105,9 +1132,19 @@ window.addEventListener('DOMContentLoaded', () => {
   initMainChart();
   initAllSparklines();
   initBebanPage();
-  const savedWarn = localStorage.getItem('warnPower');
-const savedHigh = localStorage.getItem('highPower');
-const savedShort = localStorage.getItem('shortPower');
+fetch(`${BASE_URL}/api/settings`)
+.then(res => res.json())
+.then(cfg => {
+
+    CFG.warnPower = cfg.warnPower;
+    CFG.highPower = cfg.highPower;
+    CFG.shortPower = cfg.shortPower;
+
+    document.getElementById('cfgWarn').value = cfg.warnPower;
+    document.getElementById('cfgHigh').value = cfg.highPower;
+    document.getElementById('cfgShort').value = cfg.shortPower;
+
+});
 
 if ('serviceWorker' in navigator) {
 
