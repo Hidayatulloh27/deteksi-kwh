@@ -375,7 +375,7 @@ async function fetchLatest() {
       voltage,
       current,
       power,
-      frequency: Number(data.frequency || 50),
+      frequency: Number(data.frequency ?? 0),
       pf: Number(data.pf || 0),
       kwh: Number(data.kwh || 0),
       status: finalStatus,
