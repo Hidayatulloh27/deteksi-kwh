@@ -27,6 +27,7 @@ let pollTimer = null;
 let activeAlat = null;
 let testingActive = false;
 let pengujianAktif = false;
+let lastDataTime = Date.now();
 let namaAlatAktif = "";
 
 const alatStore = {};
@@ -445,43 +446,59 @@ function updateMetricCards(data) {
 function updateStatusBadge(data) {
   const deviceStatus = document.getElementById('statusLabel');
   const statusDot = document.getElementById('statusDot');
-  const espOnline = data.status !== 'ESP_OFFLINE';
-  if (espOnline) { deviceStatus.textContent = 'ESP32 Online'; statusDot.style.background = '#22c55e'; }
-  else { deviceStatus.textContent = 'ESP32 Offline'; statusDot.style.background = 'red'; }
+
+  // ===== CEK ESP ONLINE/OFFLINE =====
+  const espOnline =
+    (Date.now() - lastDataTime) < 10000; // offline jika tidak ada data >10 detik
+
+  if (espOnline) {
+    deviceStatus.textContent = 'ESP32 Online';
+    statusDot.style.background = '#22c55e';
+  } else {
+    deviceStatus.textContent = 'ESP32 Offline';
+    statusDot.style.background = 'red';
+  }
+
+  // ===== KODE LAMA TETAP =====
   const s = data.status || 'NORMAL';
   const badge = document.getElementById('topBadge');
   const badgeText = document.getElementById('topBadgeText');
+
   badge.className = 'status-badge-top';
+
   if (s === 'WARNING') badge.classList.add('warning');
   else if (s === 'HIGH_CONSUMPTION') badge.classList.add('high');
   else if (s === 'SHORT_CIRCUIT') badge.classList.add('danger');
   else if (s === 'CYCLING_DETECTED') badge.classList.add('warning');
   else if (s === 'ESP_OFFLINE') badge.classList.add('danger');
   else if (s === 'PLN_OFFLINE') badge.classList.add('warning');
+
   badgeText.textContent = s.replaceAll('_', ' ');
+
   const relayDot = document.getElementById('relayDot');
   const relayLabel = document.getElementById('relayLabel');
   const relayTitle = document.getElementById('relayTitle');
+
   if (data.relay === true) {
+    relayDot.className = 'relay-dot protect';
+    relayLabel.textContent = 'PROTECT';
+    relayTitle.textContent = 'LISTRIK DIPUTUS';
+  } else {
+    relayDot.className = 'relay-dot normal';
+    relayLabel.textContent = 'NORMAL';
+    relayTitle.textContent = 'LISTRIK NORMAL';
+  }
 
-  relayDot.className = 'relay-dot protect';
-
-  relayLabel.textContent = 'PROTECT';
-  relayTitle.textContent = 'LISTRIK DIPUTUS';
-
-}
-else {
-
-  relayDot.className = 'relay-dot normal';
-
-  relayLabel.textContent = 'NORMAL';
-  relayTitle.textContent = 'LISTRIK NORMAL';
-
-}
   const plnPill = document.getElementById('plnPill');
   const plnActive = data.voltage > 100;
-  if (plnActive) { plnPill.textContent = 'PLN MENYALA'; plnPill.className = 'pln-pill'; }
-  else { plnPill.textContent = 'PLN MATI'; plnPill.className = 'pln-pill off'; }
+
+  if (plnActive) {
+    plnPill.textContent = 'PLN MENYALA';
+    plnPill.className = 'pln-pill';
+  } else {
+    plnPill.textContent = 'PLN MATI';
+    plnPill.className = 'pln-pill off';
+  }
 }
 
 function updateMainChart(power) {
