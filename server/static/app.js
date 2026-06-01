@@ -357,6 +357,11 @@ async function fetchLatest() {
     const result = await res.json();
     if (!result) throw new Error("Response kosong");
     const data = result.data || result;
+    lastDataTime = Date.now();
+
+    const power = Number(data.power || 0);
+    const current = Number(data.current || 0);
+    const voltage = Number(data.voltage || 0);
     const power = Number(data.power || 0);
     const current = Number(data.current || 0);
     const voltage = Number(data.voltage || 0);
@@ -577,13 +582,11 @@ function sendNotification(title, body) {
 function checkAlerts(data) {
 
   const s = data.status;
-  const now = Date.now();
 
-  if (s === lastNotifStatus && now - lastNotifTime < 15000) {
-      return;
-  }
+  // HANYA KIRIM JIKA STATUS BERUBAH
+  if (s === lastNotifStatus) return;
 
-  switch(s) {
+  switch (s) {
 
     case "WARNING":
       sendNotification(
@@ -602,7 +605,7 @@ function checkAlerts(data) {
     case "SHORT_CIRCUIT":
       sendNotification(
         "🚨 Hubung Singkat",
-        `Terdeteksi kemungkinan korsleting`
+        "Terdeteksi kemungkinan korsleting"
       );
       break;
 
@@ -621,17 +624,14 @@ function checkAlerts(data) {
       break;
 
     case "NORMAL":
-      if (lastNotifStatus !== "NORMAL") {
-        sendNotification(
-          "✅ SmartKWH",
-          "Kondisi listrik kembali normal"
-        );
-      }
+      sendNotification(
+        "✅ SmartKWH",
+        "Kondisi listrik kembali normal"
+      );
       break;
   }
 
   lastNotifStatus = s;
-  lastNotifTime = now;
 }
 
 function addLog(data) {
