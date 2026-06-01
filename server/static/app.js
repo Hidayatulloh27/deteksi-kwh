@@ -362,9 +362,7 @@ async function fetchLatest() {
     const power = Number(data.power || 0);
     const current = Number(data.current || 0);
     const voltage = Number(data.voltage || 0);
-    const power = Number(data.power || 0);
-    const current = Number(data.current || 0);
-    const voltage = Number(data.voltage || 0);
+
     const cyclingDetected = detectCycling(power);
     let finalStatus = classifyStatus(power, current, voltage);
     if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
