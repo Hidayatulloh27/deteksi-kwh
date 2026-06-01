@@ -539,40 +539,22 @@ let notifLock = false;
 
 function sendNotification(title, body) {
 
-    console.log("KIRIM NOTIF:", title, body);
+  if (Notification.permission !== "granted") return;
 
-    if (Notification.permission === "granted") {
+  navigator.serviceWorker.ready
+    .then(reg => {
 
-        navigator.serviceWorker.getRegistration()
-        .then(reg => {
+      return reg.showNotification(title, {
+        body: body,
+        requireInteraction: true,
+        renotify: true,
+        tag: Date.now().toString(),
+        vibrate: [300, 200, 300]
+      });
 
-            console.log("REG:", reg);
+    })
+    .catch(err => console.error(err));
 
-            if (reg) {
-
-                return reg.showNotification(title, {
-                    body: body
-                });
-
-            } else {
-
-                console.log("SERVICE WORKER TIDAK ADA");
-
-            }
-
-        })
-        .then(() => {
-            console.log("NOTIF BERHASIL DIKIRIM");
-        })
-        .catch(err => {
-            console.error("ERROR NOTIF:", err);
-        });
-
-    } else {
-
-        console.log("PERMISSION:", Notification.permission);
-
-    }
 }
 
 function checkAlerts(data) {

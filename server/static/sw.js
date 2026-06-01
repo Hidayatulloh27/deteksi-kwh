@@ -1,17 +1,15 @@
 self.addEventListener('install', event => {
-    console.log('Service Worker Installed');
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-    console.log('Service Worker Activated');
+  event.waitUntil(clients.claim());
 });
 
 self.addEventListener('notificationclick', event => {
+  event.notification.close();
 
-    event.notification.close();
-
-    event.waitUntil(
-        clients.openWindow('/')
-    );
-
+  event.waitUntil(
+    clients.openWindow('/')
+  );
 });
