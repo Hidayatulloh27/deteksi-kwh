@@ -539,34 +539,40 @@ let notifLock = false;
 
 function sendNotification(title, body) {
 
+    console.log("KIRIM NOTIF:", title, body);
+
     if (Notification.permission === "granted") {
 
         navigator.serviceWorker.getRegistration()
-
         .then(reg => {
+
+            console.log("REG:", reg);
 
             if (reg) {
 
-                reg.showNotification(title, {
-
-                    body: body,
-
-                    icon: '/static/icon1.png',
-
-                    badge: '/static/icon1.png',
-
-                    vibrate: [200, 100, 200],
-
-                    tag: 'smartkwh-alert'
-
+                return reg.showNotification(title, {
+                    body: body
                 });
+
+            } else {
+
+                console.log("SERVICE WORKER TIDAK ADA");
 
             }
 
+        })
+        .then(() => {
+            console.log("NOTIF BERHASIL DIKIRIM");
+        })
+        .catch(err => {
+            console.error("ERROR NOTIF:", err);
         });
 
-    }
+    } else {
 
+        console.log("PERMISSION:", Notification.permission);
+
+    }
 }
 
 function checkAlerts(data) {
