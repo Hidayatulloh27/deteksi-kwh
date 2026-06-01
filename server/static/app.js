@@ -357,7 +357,9 @@ async function fetchLatest() {
     const result = await res.json();
     if (!result) throw new Error("Response kosong");
     const data = result.data || result;
-    lastDataTime = Date.now();
+    lastDataTime = data.status !== 'ESP_OFFLINE'
+    ? Date.now()
+    : 0;
 
     const power = Number(data.power || 0);
     const current = Number(data.current || 0);
