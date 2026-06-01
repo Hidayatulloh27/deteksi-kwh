@@ -570,18 +570,63 @@ function sendNotification(title, body) {
 }
 
 function checkAlerts(data) {
-  console.log("STATUS:", data.status);
+
   const s = data.status;
   const now = Date.now();
-  if (s === lastNotifStatus && now - lastNotifTime < 15000) return;
-  if (s === 'NORMAL' && lastNotifStatus !== 'NORMAL') {
-    sendNotification('SmartKWH', '✅ Kondisi listrik kembali normal');
-    lastNotifStatus = 'NORMAL'; lastNotifTime = now; return;
+
+  if (s === lastNotifStatus && now - lastNotifTime < 15000) {
+      return;
   }
-  if (['SHORT_CIRCUIT','HIGH_CONSUMPTION','WARNING','CYCLING_DETECTED','ESP_OFFLINE','PLN_OFFLINE'].includes(s)) {
-    sendNotification('SmartKWH Alert', s.replaceAll('_', ' '));
-    lastNotifStatus = s; lastNotifTime = now;
+
+  switch(s) {
+
+    case "WARNING":
+      sendNotification(
+        "⚠️ SmartKWH Warning",
+        `Daya melebihi batas warning (${data.power} W)`
+      );
+      break;
+
+    case "HIGH_CONSUMPTION":
+      sendNotification(
+        "🔥 Konsumsi Tinggi",
+        `Pemakaian listrik tinggi (${data.power} W)`
+      );
+      break;
+
+    case "SHORT_CIRCUIT":
+      sendNotification(
+        "🚨 Hubung Singkat",
+        `Terdeteksi kemungkinan korsleting`
+      );
+      break;
+
+    case "PLN_OFFLINE":
+      sendNotification(
+        "🔌 PLN Mati",
+        "Tegangan PLN terputus"
+      );
+      break;
+
+    case "ESP_OFFLINE":
+      sendNotification(
+        "📡 ESP32 Offline",
+        "Perangkat tidak terhubung"
+      );
+      break;
+
+    case "NORMAL":
+      if (lastNotifStatus !== "NORMAL") {
+        sendNotification(
+          "✅ SmartKWH",
+          "Kondisi listrik kembali normal"
+        );
+      }
+      break;
   }
+
+  lastNotifStatus = s;
+  lastNotifTime = now;
 }
 
 function addLog(data) {
