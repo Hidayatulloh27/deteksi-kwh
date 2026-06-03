@@ -544,11 +544,9 @@ function updateCostPanel(data) {
   document.getElementById('costPredict').textContent = rupiah(prediksi);
   const realtimeEl = document.getElementById('costRealtime');
   if (realtimeEl) realtimeEl.textContent = 'Rp ' + biayaPerDetik.toFixed(6) + '/detik';
-  let confidence = 95;
-  if (data.status === 'WARNING') confidence = 75;
-  if (data.status === 'HIGH_CONSUMPTION') confidence = 60;
-  if (data.status === 'SHORT_CIRCUIT') confidence = 20;
-  document.getElementById('costConf').textContent = confidence + '%';
+  const confidence = Number(data.confidence || 0);
+  document.getElementById('costConf').textContent =
+    confidence + '%';
   const trendBadge = document.getElementById('trendBadge');
   if (data.power > 1500) { trendBadge.textContent = 'TINGGI'; trendBadge.className = 'trend-badge danger'; }
   else if (data.power > 800) { trendBadge.textContent = 'NAIK'; trendBadge.className = 'trend-badge warning'; }

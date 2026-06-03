@@ -70,6 +70,7 @@ latest_data = {
     "frequency": 0,
     "pf": 0,
     "kwh": 0,
+    "confidence": 0,
     "status": "OFFLINE",
     "relay": False,
     "pln": False
