@@ -361,9 +361,18 @@ async function fetchLatest() {
     ? Date.now()
     : 0;
 
-    const power = Number(data.power || 0);
-    const current = Number(data.current || 0);
-    const voltage = Number(data.voltage || 0);
+const power = Number(data.power || 0);
+const current = Number(data.current || 0);
+const voltage = Number(data.voltage || 0);
+
+let frequency = Number(data.frequency || 0);
+let pf = Number(data.pf || 0);
+let kwh = Number(data.kwh || 0);
+
+if (voltage < 10) {
+    frequency = 0;
+    pf = 0;
+}
 
     const cyclingDetected = detectCycling(power);
     let finalStatus = classifyStatus(power, current, voltage);
@@ -375,9 +384,9 @@ async function fetchLatest() {
       voltage,
       current,
       power,
-      frequency: Number(data.frequency ?? 0),
-      pf: Number(data.pf || 0),
-      kwh: Number(data.kwh || 0),
+      frequency: frequency,
+      pf: pf,
+      kwh: kwh,
       status: finalStatus,
       relay: relayState,
       pln: voltage > 100,
@@ -423,6 +432,10 @@ function updateLastUpdate() {
 
 function updateMetricCards(data) {
   const now = new Date().toLocaleTimeString('id-ID', { hour12: false });
+  if (data.voltage < 10) {
+    data.frequency = 0;
+    data.pf = 0;
+}
   const params = [
     { key: 'voltage',   val: data.voltage,   elId: 'mV',   minId: 'mVmin',   maxId: 'mVmax' },
     { key: 'current',   val: data.current,   elId: 'mA',   minId: 'mAmin',   maxId: 'mAmax' },
@@ -1143,28 +1156,6 @@ fetch(`${BASE_URL}/api/latest`)
   .then(res => res.json())
   .then(data => console.log("API CONNECT:", data))
   .catch(err => console.log("API ERROR:", err));
-
-  function mulaiPengujian() {
-
-  const nama = document
-      .getElementById("namaAlatInput")
-      .value
-      .trim();
-
-  if (!nama) {
-      alert("Masukkan nama alat terlebih dahulu!");
-      return;
-  }
-
-  namaAlatAktif = nama;
-  pengujianAktif = true;
-
-  if (activeBeban !== null) {
-      getBebanStore(activeBeban).namaAlat = nama;
-  }
-
-  showToast("Pengujian dimulai: " + nama);
-}
 
 function selesaiPengujian() {
 
