@@ -375,11 +375,20 @@ if (voltage < 10) {
 }
 
     const cyclingDetected = detectCycling(power);
-    let finalStatus = classifyStatus(power, current, voltage);
-    if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
-    const relayState =
-    finalStatus === 'SHORT_CIRCUIT' ||
-    finalStatus === 'HIGH_CONSUMPTION';
+
+    // Ambil status langsung dari ESP32
+    let finalStatus = data.status || 'NORMAL';
+
+    if (
+        cyclingDetected &&
+        finalStatus !== 'ESP_OFFLINE' &&
+        finalStatus !== 'KONSLET'
+    ) {
+        finalStatus = 'CYCLING_DETECTED';
+    }
+
+    // Ambil status relay langsung dari ESP32
+    const relayState = data.relay;
     return {
       voltage,
       current,
