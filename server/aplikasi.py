@@ -83,6 +83,7 @@ SETTINGS = {
     "highPower": 2200,
     "shortPower": 3000
 }
+RESET_PROTEKSI = False
 # =========================
 # HOME
 # =========================
@@ -241,6 +242,37 @@ def save_settings():
     return jsonify({
         "success": True,
         "settings": SETTINGS
+    })
+# =========================
+# RESET PROTEKSI
+# =========================
+@app.route('/api/reset-proteksi', methods=['POST'])
+def reset_proteksi():
+
+    global RESET_PROTEKSI
+
+    RESET_PROTEKSI = True
+
+    print("🔄 RESET PROTEKSI DIMINTA")
+
+    return jsonify({
+        "success": True
+    })
+# =========================
+# CEK RESET PROTEKSI
+# =========================
+@app.route('/api/reset-proteksi')
+def get_reset_proteksi():
+
+    global RESET_PROTEKSI
+
+    status = RESET_PROTEKSI
+
+    if RESET_PROTEKSI:
+        RESET_PROTEKSI = False
+
+    return jsonify({
+        "reset": status
     })
 
 @app.route('/health')
