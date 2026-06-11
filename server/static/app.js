@@ -375,20 +375,11 @@ if (voltage < 10) {
 }
 
     const cyclingDetected = detectCycling(power);
-
-    // Ambil status langsung dari ESP32
-    let finalStatus = data.status || 'NORMAL';
-
-    if (
-        cyclingDetected &&
-        finalStatus !== 'ESP_OFFLINE' &&
-        finalStatus !== 'KONSLET'
-    ) {
-        finalStatus = 'CYCLING_DETECTED';
-    }
-
-    // Ambil status relay langsung dari ESP32
-    const relayState = data.relay;
+    let finalStatus = classifyStatus(power, current, voltage);
+    if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
+    const relayState =
+    finalStatus === 'SHORT_CIRCUIT' ||
+    finalStatus === 'HIGH_CONSUMPTION';
     return {
       voltage,
       current,
@@ -1175,6 +1166,38 @@ function selesaiPengujian() {
 
   showToast("Pengujian selesai");
 }
+async function resetProteksi() {
+
+    if (!confirm("Reset proteksi dan hidupkan relay kembali?")) {
+        return;
+    }
+
+    try {
+
+        const res = await fetch("/api/reset-proteksi", {
+            method: "POST"
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+
+            alert("✅ Reset proteksi berhasil dikirim");
+
+        } else {
+
+            alert("❌ Reset gagal");
+
+        }
+
+    } catch (err) {
+
+        console.error(err);
+        alert("❌ Gagal koneksi ke server");
+
+    }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   initSidebar();
   initMainChart();
@@ -1213,6 +1236,7 @@ window.addEventListener('DOMContentLoaded', () => {
       console.log("SETTINGS LOADED:", cfg);
 
     })
+
   .catch(err => console.error(err));
   renderLogs('ALL');
   setTimeout(initHistChart, 100);
