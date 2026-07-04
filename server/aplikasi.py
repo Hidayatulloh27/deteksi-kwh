@@ -66,7 +66,6 @@ if not os.path.exists(CSV_FILE):
     "pln"
 ])
     df.to_csv(CSV_FILE, index=False)
-
 # =========================
 # WAKTU TERAKHIR DATA
 # =========================
@@ -353,23 +352,37 @@ def save_pengujian():
 
         data = request.get_json()
 
+        print("========== SAVE PENGUJIAN ==========")
+
         nama_alat = data.get("namaAlat", "Tanpa_Nama")
         hasil = data.get("data", [])
+
+        print("Nama alat :", nama_alat)
+        print("Jumlah data :", len(hasil))
+
+        if len(hasil) > 0:
+            print("Baris pertama :", hasil[0])
 
         folder = os.path.join(DATA_DIR, "pengujian")
         os.makedirs(folder, exist_ok=True)
 
         nama_file = (
-            nama_alat.replace(" ", "_") +
-            "_" +
-            datetime.now().strftime("%Y%m%d_%H%M%S") +
-            ".csv"
+            nama_alat.replace(" ", "_")
+            + "_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S")
+            + ".csv"
         )
 
         file_path = os.path.join(folder, nama_file)
 
-        pd.DataFrame(hasil).to_csv(file_path, index=False)
+        df = pd.DataFrame(hasil)
 
+        print(df.head())
+        print("Shape :", df.shape)
+
+        df.to_csv(file_path, index=False)
+
+        print("Disimpan ke :", file_path)
         print("✅ HASIL PENGUJIAN DISIMPAN :", file_path)
 
         return jsonify({
