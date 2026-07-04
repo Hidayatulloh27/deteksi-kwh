@@ -1253,11 +1253,55 @@ function downloadCSV(namaAlat, data) {
 
     csv += "No,Waktu,Tegangan(V),Arus(A),Daya(W)\n";
 
-    data.forEach((d,i)=>{
+    const body = data.map((d,i)=>[
+    i+1,
+    d.waktu,
+    Number(d.voltage).toFixed(1),
+    Number(d.current).toFixed(3),
+    Number(d.power).toFixed(2)
+]);
 
-        csv += `${i+1},${d.waktu},${d.voltage},${d.current},${d.power}\n`;
+doc.autoTable({
 
-    });
+    startY:y,
+
+    head:[[
+        "No",
+        "Waktu",
+        "Volt",
+        "Arus",
+        "Daya"
+    ]],
+
+    body:body,
+
+    theme:"grid",
+
+    headStyles:{
+
+        fillColor:[0,102,204],
+
+        textColor:255,
+
+        halign:"center"
+
+    },
+
+    styles:{
+
+        fontSize:9,
+
+        halign:"center"
+
+    },
+
+    alternateRowStyles:{
+
+        fillColor:[245,245,245]
+
+    }
+
+});
 
     const blob = new Blob([csv],{
         type:"text/csv;charset=utf-8;"
@@ -1342,6 +1386,8 @@ async function selesaiPengujian() {
         const currentChart = document
     .getElementById("bebanCurrentChart")
     .toDataURL("image/png");
+    const logo =
+document.getElementById("logoUniversitas");
         // ==========================
         // 3. Download PDF
         // ==========================
@@ -1410,17 +1456,55 @@ function downloadExcel(namaAlat, data){
 
     ];
 
-    data.forEach((d,i)=>{
+    const body = data.map((d,i)=>[
+    i+1,
+    d.waktu,
+    Number(d.voltage).toFixed(1),
+    Number(d.current).toFixed(3),
+    Number(d.power).toFixed(2)
+]);
 
-        wsData.push([
-            i+1,
-            d.waktu,
-            d.voltage,
-            d.current,
-            d.power
-        ]);
+doc.autoTable({
 
-    });
+    startY:y,
+
+    head:[[
+        "No",
+        "Waktu",
+        "Volt",
+        "Arus",
+        "Daya"
+    ]],
+
+    body:body,
+
+    theme:"grid",
+
+    headStyles:{
+
+        fillColor:[0,102,204],
+
+        textColor:255,
+
+        halign:"center"
+
+    },
+
+    styles:{
+
+        fontSize:9,
+
+        halign:"center"
+
+    },
+
+    alternateRowStyles:{
+
+        fillColor:[245,245,245]
+
+    }
+
+});
 
     const wb = XLSX.utils.book_new();
 
@@ -1449,245 +1533,509 @@ async function downloadPDF(namaAlat, data){
     }
 
     const { jsPDF } = window.jspdf;
-
     const doc = new jsPDF("p","mm","a4");
-    //==============================
-// UKURAN HALAMAN
-//==============================
+
+    //-----------------------------
+    // UKURAN HALAMAN
+    //-----------------------------
+
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    const marginLeft = 15;
-    const marginRight = 15;
+    const margin = 15;
 
-    const contentWidth = pageWidth - marginLeft - marginRight;
-    //==============================
-    // AMBIL GRAFIK DARI CHART.JS
-    //==============================
+    const contentWidth = pageWidth - margin*2;
 
-    const powerChart =
-    document.getElementById("bebanPowerChart")
-    .toDataURL("image/png");
+    let y = 20;
 
-    const currentChart =
-    document.getElementById("bebanCurrentChart")
-    .toDataURL("image/png");
-        let y = 20;
-    const logo =
-document.getElementById("picture1.png");
+    //-----------------------------
+    // AMBIL GRAFIK
+    //-----------------------------
+
+    const powerCanvas = document.getElementById("bebanPowerChart");
+    const currentCanvas = document.getElementById("bebanCurrentChart");
+
+    const powerChart = powerCanvas.toDataURL("image/png");
+    const currentChart = currentCanvas.toDataURL("image/png");
+    const logo = document.getElementById("logoUniversitas");
+    //-----------------------------
+    // HITUNG STATISTIK
+    //-----------------------------
+
     const avgPower =
-        (data.reduce((a,b)=>a+b.power,0)/data.length).toFixed(2);
+        data.reduce((a,b)=>a+b.power,0)/data.length;
 
     const avgCurrent =
-        (data.reduce((a,b)=>a+b.current,0)/data.length).toFixed(3);
+        data.reduce((a,b)=>a+b.current,0)/data.length;
 
     const avgVoltage =
-        (data.reduce((a,b)=>a+b.voltage,0)/data.length).toFixed(2);
+        data.reduce((a,b)=>a+b.voltage,0)/data.length;
 
     const maxPower =
-        Math.max(...data.map(d=>d.power)).toFixed(2);
+        Math.max(...data.map(d=>d.power));
 
     const minPower =
-        Math.min(...data.map(d=>d.power)).toFixed(2);
-    
+        Math.min(...data.map(d=>d.power));
+
+    //-----------------------------
+    // WATERMARK
+    //-----------------------------
+
+    doc.setTextColor(230);
+
+    doc.setFontSize(34);
+
+    doc.text(
+        "Kupit Smart IoT Energy Monitor",
+        pageWidth/2,
+        pageHeight/2,
+        {
+            align:"center",
+            angle:45
+        }
+    );
+
+    doc.setTextColor(0);
+
+    //-----------------------------
+    // HEADER
+    //-----------------------------
+    doc.addImage(
+logo,
+"PNG",
+15,
+10,
+22,
+22
+);
     doc.setFont("helvetica","bold");
-doc.setFontSize(18);
+    doc.setFontSize(18);
 
-doc.text(
-"HASIL PENGUJIAN SISTEM IoT",
-pageWidth/2,
-y,
-{align:"center"}
-);
+    doc.text(
+        "HASIL PENGUJIAN SISTEM IoT",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
 
-y+=8;
+    y+=8;
 
+    doc.setFontSize(13);
+
+    doc.text(
+        "Deteksi Anomali Konsumsi Daya Listrik",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
+
+    y+=12;
+
+    doc.setDrawColor(0,102,204);
+
+    doc.line(
+        margin,
+        y,
+        pageWidth-margin,
+        y
+    );
+
+    y+=10;
+        //-----------------------------
+
+    y+=10;
+    //---------------------------------
+// IDENTITAS MAHASISWA
+//---------------------------------
+
+doc.setDrawColor(0,102,204);
+doc.roundedRect(12,y-4,185,42,3,3);
+
+doc.setFont("helvetica","bold");
 doc.setFontSize(13);
 
-doc.text(
-"Deteksi Anomali Konsumsi Daya Listrik",
-pageWidth/2,
-y,
-{align:"center"}
-);
+doc.text("IDENTITAS",15,y+4);
 
-y+=12;
+doc.setFont("helvetica","normal");
 doc.setFontSize(11);
-doc.setFont("helvetica","normal");
 
-doc.text("Nama Alat : "+namaAlat,15,y);
-y+=7;
-
-doc.text("Tanggal : "+new Date().toLocaleDateString(),15,y);
-y+=7;
-
-doc.text("Jam : "+new Date().toLocaleTimeString(),15,y);
 y+=12;
 
-   doc.setFont("helvetica","bold");
+doc.text("Nama Mahasiswa",15,y);
+doc.text(":",55,y);
+doc.text("Muhammad Arif Hidayatulloh",60,y);
 
-doc.text("STATISTIK PENGUJIAN",15,y);
-
-y+=8;
-
-doc.setFont("helvetica","normal");
-
-doc.text("Jumlah Data : "+data.length,15,y);
 y+=6;
 
-doc.text("Daya Rata-rata : "+avgPower.toFixed(2)+" W",15,y);
+doc.text("NIM",15,y);
+doc.text(":",55,y);
+doc.text("231301007",60,y);
+
 y+=6;
 
-doc.text("Daya Maksimum : "+maxPower.toFixed(2)+" W",15,y);
+doc.text("Program Studi",15,y);
+doc.text(":",55,y);
+doc.text("Sistem Komputer",60,y);
+
 y+=6;
 
-doc.text("Daya Minimum : "+minPower.toFixed(2)+" W",15,y);
-y+=12;
+doc.text("Universitas",15,y);
+doc.text(":",55,y);
+doc.text("Universitas Nahdlatul Ulama Sunan Giri",60,y);
 
+y+=6;
+
+doc.text("Lokasi Pengujian",15,y);
+doc.text(":",55,y);
+doc.text("Laboratorium Kupit_3DIoT",60,y);
+
+y+=15;
+//---------------------------------
+// INFORMASI PENGUJIAN
+//---------------------------------
+
+doc.setFont("helvetica","bold");
 doc.setFontSize(13);
-doc.setFont("helvetica","bold");
 
-doc.setTextColor(255,120,0);
-
-doc.text(
-"Grafik Daya",
-pageWidth/2,
-y,
-{align:"center"}
-);
+doc.text("INFORMASI PENGUJIAN",15,y);
 
 y+=8;
-
-doc.addImage(
-powerChart,
-"PNG",
-marginLeft,
-y,
-contentWidth,
-60
-);
-
-y+=70;
-doc.setTextColor(0,90,255);
-
-doc.text(
-"Grafik Arus",
-pageWidth/2,
-y,
-{align:"center"}
-);
-
-y+=8;
-
-doc.addImage(
-currentChart,
-"PNG",
-marginLeft,
-y,
-contentWidth,
-60
-);
-
-y+=70;
-doc.addPage();
-
-y=20;
-
-doc.setFontSize(16);
-doc.setFont("helvetica","bold");
-
-doc.text(
-"KESIMPULAN",
-pageWidth/2,
-20,
-{align:"center"}
-);
-
-doc.setFontSize(11);
 
 doc.setFont("helvetica","normal");
+doc.setFontSize(11);
 
-doc.text(
-`Pengujian pada beban ${namaAlat}
-menunjukkan sistem bekerja dengan baik.
-Tidak ditemukan anomali selama proses pengujian.
+doc.text("Nama Alat",15,y);
+doc.text(":",55,y);
+doc.text(namaAlat,60,y);
 
-Rata-rata daya yang dihasilkan sebesar
-${avgPower.toFixed(2)} Watt.`,
+y+=6;
+
+doc.text("Tanggal",15,y);
+doc.text(":",55,y);
+doc.text(new Date().toLocaleDateString("id-ID"),60,y);
+
+y+=6;
+
+doc.text("Jam",15,y);
+doc.text(":",55,y);
+doc.text(new Date().toLocaleTimeString("id-ID"),60,y);
+
+y+=15;
+doc.setDrawColor(0,102,204);
+
+
+    //-----------------------------
+    // STATISTIK
+    //-----------------------------
+
+    doc.setFont("helvetica","bold");
+    doc.setFontSize(13);
+
+    doc.text("STATISTIK PENGUJIAN", margin, y);
+
+    y += 8;
+
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(11);
+
+    doc.text(`Jumlah Data          : ${data.length}`, margin, y);
+    y += 6;
+
+    doc.text(`Daya Rata-rata      : ${avgPower.toFixed(2)} Watt`, margin, y);
+    y += 6;
+
+    doc.text(`Daya Maksimum       : ${maxPower.toFixed(2)} Watt`, margin, y);
+    y += 6;
+
+    doc.text(`Daya Minimum        : ${minPower.toFixed(2)} Watt`, margin, y);
+    y += 6;
+
+    doc.text(`Arus Rata-rata      : ${avgCurrent.toFixed(3)} Ampere`, margin, y);
+    y += 6;
+
+    doc.text(`Tegangan Rata-rata : ${avgVoltage.toFixed(2)} Volt`, margin, y);
+
+    y += 15;
+
+    //-----------------------------
+    // GRAFIK DAYA
+    //-----------------------------
+
+    doc.setFont("helvetica","bold");
+    doc.setFontSize(14);
+
+    doc.setTextColor(255,120,0);
+
+    doc.text(
+        "GRAFIK DAYA",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
+
+    y += 8;
+
+    doc.addImage(
+        powerChart,
+        "PNG",
+        margin,
+        y,
+        contentWidth,
+        60
+    );
+
+    y += 70;
+
+    //-----------------------------
+    // GRAFIK ARUS
+    //-----------------------------
+
+    doc.setTextColor(0,102,255);
+
+    doc.text(
+        "GRAFIK ARUS",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
+
+    y += 8;
+
+    doc.addImage(
+        currentChart,
+        "PNG",
+        margin,
+        y,
+        contentWidth,
+        60
+    );
+
+    doc.setTextColor(0,0,0);
+
+    y += 70;
+
+    //-----------------------------
+    // HALAMAN BARU
+    //-----------------------------
+
+    doc.addPage();
+
+    y = 20;
+        //------------------------------------------
+    // JUDUL TABEL
+    //------------------------------------------
+
+    doc.setFont("helvetica","bold");
+    doc.setFontSize(16);
+
+    doc.text(
+        "DATA HASIL PENGUJIAN",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
+
+    y += 12;
+    // DATA
+    //------------------------------------------
+
+    const body = data.map((d,i)=>[
+    i+1,
+    d.waktu,
+    Number(d.voltage).toFixed(1),
+    Number(d.current).toFixed(3),
+    Number(d.power).toFixed(2)
+]);
+
+doc.autoTable({
+
+    startY:y,
+
+    head:[[
+        "No",
+        "Waktu",
+        "Tegangan (V)",
+        "Arus (A)",
+        "Daya (W)"
+    ]],
+
+    body:body,
+
+    theme:"grid",
+
+    headStyles:{
+        fillColor:[0,102,204],
+        textColor:255,
+        halign:"center",
+        fontStyle:"bold"
+    },
+
+    bodyStyles:{
+        halign:"center"
+    },
+
+    alternateRowStyles:{
+        fillColor:[245,245,245]
+    },
+
+    margin:{
+        left:15,
+        right:15
+    }
+
+});
+
+    //------------------------------------------
+    // HALAMAN KESIMPULAN
+    //------------------------------------------
+
+    doc.addPage();
+
+    y=30;
+
+    doc.setFont("helvetica","bold");
+
+    doc.setFontSize(18);
+
+    doc.text(
+        "KESIMPULAN",
+        pageWidth/2,
+        y,
+        {
+            align:"center"
+        }
+    );
+
+    y+=20;
+
+    doc.setFont("helvetica","normal");
+
+    doc.setFontSize(12);
+
+    doc.text(
+
+`Pengujian terhadap beban ${namaAlat}
+berhasil dilakukan sebanyak ${data.length} kali
+pengambilan data.
+
+Berdasarkan hasil pengujian diperoleh:
+
+• Daya rata-rata : ${avgPower.toFixed(2)} Watt
+
+• Daya maksimum : ${maxPower.toFixed(2)} Watt
+
+• Daya minimum : ${minPower.toFixed(2)} Watt
+
+• Arus rata-rata : ${avgCurrent.toFixed(3)} A
+
+• Tegangan rata-rata : ${avgVoltage.toFixed(2)} Volt
+
+Selama proses pengujian sistem
+Kupit_Smart IoT Energy Monitor
+mampu melakukan monitoring
+konsumsi energi listrik secara
+real-time dengan baik.`,
+
 20,
-40
+y
+
 );
 
-doc.text(
+    //------------------------------------------
+    // TANDA TANGAN
+    //------------------------------------------
+
+    doc.setFont("helvetica","normal");
+
+    doc.text(
+
 "Mengetahui,",
+
 150,
+
 220
+
 );
 
-doc.text(
+    doc.text(
+
 "Penguji",
+
 150,
+
 227
+
 );
 
-doc.line(
+    doc.line(
+
 145,
+
 260,
+
 190,
+
 260
+
 );
 
-    doc.text("Arus Rata-rata : "+avgCurrent+" A",25,112);
+    //------------------------------------------
+    // FOOTER
+    //------------------------------------------
+const totalPage = doc.internal.getNumberOfPages();
 
-    doc.text("Tegangan Rata-rata : "+avgVoltage+" V",25,119);
+for(let i=1;i<=totalPage;i++){
 
-    doc.line(20,125,190,125);
+    doc.setPage(i);
 
-    doc.text("DATA PENGUJIAN",20,135);
-
-    let y=145;
+    doc.setDrawColor(180);
+    doc.line(15,285,195,285);
 
     doc.setFontSize(9);
+    doc.setTextColor(120);
 
-    doc.text("No",20,y);
+    doc.text(
+        "Kupit Smart IoT Energy Monitor",
+        15,
+        290
+    );
 
-    doc.text("Waktu",35,y);
+    doc.text(
+        "Sistem Monitoring Energi Listrik Berbasis IoT",
+        pageWidth/2,
+        290,
+        {align:"center"}
+    );
 
-    doc.text("Volt",75,y);
+    doc.text(
+        "Halaman "+i+" dari "+totalPage,
+        195,
+        290,
+        {align:"right"}
+    );
 
-    doc.text("Arus",105,y);
+}
 
-    doc.text("Daya",145,y);
-
-    y+=6;
-
-    data.forEach((d,i)=>{
-
-        if(y>280){
-
-            doc.addPage();
-
-            y=20;
-
-        }
-
-        doc.text(String(i+1),20,y);
-
-        doc.text(d.waktu,35,y);
-
-        doc.text(String(d.voltage),75,y);
-
-        doc.text(String(d.current),105,y);
-
-        doc.text(String(d.power),145,y);
-
-        y+=6;
-
-    });
+    //------------------------------------------
+    // SIMPAN
+    //------------------------------------------
 
     doc.save(
+
         namaAlat.replace(/\s+/g,"_")+
-        ".pdf"
+
+        "_Laporan_Pengujian.pdf"
+
     );
 
 }

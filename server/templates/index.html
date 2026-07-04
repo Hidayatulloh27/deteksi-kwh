@@ -451,12 +451,29 @@
 </div>
 
 <!-- TOAST -->
-<div class="toast" id="toast"></div>
+<!-- Chart -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<!-- Excel -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- PDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- AutoTable -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable"></script>
+
+<!-- html2canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="/static/app.js"></script>
+
+<!-- Logo -->
+<img
+id="logoUniversitas"
+src="{{ url_for('static', filename='img/logo_universitas.png') }}"
+style="display:none">
+
+<!-- App -->
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+
 </body>
 </html>
