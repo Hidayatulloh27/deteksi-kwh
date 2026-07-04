@@ -42,17 +42,26 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # buat csv jika belum ada
 if not os.path.exists(CSV_FILE):
     df = pd.DataFrame(columns=[
-        "timestamp",
-        "voltage",
-        "current",
-        "power",
-        "frequency",
-        "pf",
-        "kwh",
-        "status",
-        "relay",
-        "pln"
-    ])
+    "timestamp",
+    "voltage",
+    "current",
+    "power",
+    "frequency",
+    "pf",
+    "kwh",
+
+    "status",
+
+    "deltaPower",
+    "deltaPowerRate",
+    "temporalStatus",
+
+    "cycleCount",
+    "deviceCycling",
+
+    "relay",
+    "pln"
+])
     df.to_csv(CSV_FILE, index=False)
 
 # =========================
@@ -70,10 +79,14 @@ latest_data = {
     "frequency": 0,
     "pf": 0,
     "kwh": 0,
-    "confidence": 0,
     "status": "OFFLINE",
     "relay": False,
-    "pln": False
+    "pln": False,
+
+    "deltaPower": 0,
+    "deltaPowerRate": 0,
+    "temporal": "NORMAL",
+    "deviceCycling": False
 }
 # =========================
 # SETTINGS GLOBAL
@@ -152,9 +165,15 @@ def api_update():
             "frequency": data.get("frequency", 50),
             "pf": data.get("pf", 0),
             "kwh": data.get("kwh", 0),
+
             "status": data.get("status", "NORMAL"),
             "relay": data.get("relay", True),
-            "pln": data.get("pln", True)
+            "pln": data.get("pln", True),
+
+            "deltaPower": data.get("deltaPower", 0),
+            "deltaPowerRate": data.get("deltaPowerRate", 0),
+            "temporal": data.get("temporal", "NORMAL"),
+            "deviceCycling": data.get("deviceCycling", False)
         }
 
         last_update = time.time()
