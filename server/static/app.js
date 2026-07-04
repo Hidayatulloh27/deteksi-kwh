@@ -1349,7 +1349,9 @@ async function selesaiPengujian() {
 
     try {
 
+        // ==========================
         // Simpan ke server
+        // ==========================
         const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
             method: "POST",
             headers: {
@@ -1369,28 +1371,41 @@ async function selesaiPengujian() {
             throw new Error(result.error || "Gagal menyimpan ke server");
         }
 
+        // ==========================
         // Download Excel
+        // ==========================
         downloadExcel(store.namaAlat, hasil);
 
+        // ==========================
         // Download PDF
+        // ==========================
         await downloadPDF(store.namaAlat, hasil);
+
+        // ==========================
+        // Reset data setelah berhasil
+        // ==========================
+        store.power = [];
+        store.current = [];
+        store.voltage = [];
+        store.labels = [];
+
+        pengujianAktif = false;
+        testingActive = false;
+        activeBeban = null;
 
         showToast("Pengujian berhasil disimpan");
 
     }
-    catch(err){
+    catch (err) {
 
         console.error(err);
 
-        showToast("Gagal menyimpan");
+        showToast("Gagal menyimpan: " + err.message);
 
     }
 
-    pengujianAktif = false;
-    testingActive = false;
-    activeAlat = null;
-
 }
+
 function downloadExcel(namaAlat, data){
 
     if(data.length===0){
@@ -1458,32 +1473,13 @@ XLSX.utils.book_append_sheet(
     ws,
     "Pengujian"
 );
-
 XLSX.writeFile(
     wb,
-    namaAlat.replace(/\s+/g,"_")+
-    "_"+
-    new Date().toISOString().slice(0,19).replace(/:/g,"-")+
+    namaAlat.replace(/\s+/g, "_") +
+    "_" +
+    new Date().toISOString().slice(0,19).replace(/:/g,"-") +
     ".xlsx"
 );
-
-    const wb = XLSX.utils.book_new();
-
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    XLSX.utils.book_append_sheet(
-        wb,
-        ws,
-        "Pengujian"
-    );
-
-    XLSX.writeFile(
-        wb,
-        namaAlat.replace(/\s+/g,"_")+
-        "_" +
-        new Date().toISOString().slice(0,19).replace(/:/g,"-")+
-        ".xlsx"
-    );
 
 }
 async function downloadPDF(namaAlat, data){
@@ -1518,7 +1514,8 @@ async function downloadPDF(namaAlat, data){
 
     const powerChart = powerCanvas.toDataURL("image/png");
     const currentChart = currentCanvas.toDataURL("image/png");
-    const logo = document.getElementById("logoUniversitas");
+    const logo =
+    document.getElementById("logoUniversitas");
     //-----------------------------
     // HITUNG STATISTIK
     //-----------------------------
@@ -1546,22 +1543,12 @@ async function downloadPDF(namaAlat, data){
 
     doc.setFontSize(34);
 
-    doc.text(
-        "Kupit Smart IoT Energy Monitor",
-        pageWidth/2,
-        pageHeight/2,
-        {
-            align:"center",
-            angle:45
-        }
-    );
-
     doc.setTextColor(0);
 
     //-----------------------------
     // HEADER
     //-----------------------------
-    doc.addImage(
+doc.addImage(
 logo,
 "PNG",
 15,
