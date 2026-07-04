@@ -144,34 +144,36 @@ function getBebanStore(idx) {
 // Dipanggil setiap tick — hanya simpan ke beban aktif
 function recordToActiveBeban(data) {
 
-    // hanya saat pengujian aktif
-    if (!pengujianAktif) return;
+  console.log(
+      "recordToActiveBeban",
+      "aktif =", pengujianAktif,
+      "beban =", activeBeban,
+      "power =", data.power
+  );
 
-    // harus ada beban yang dipilih
-    if (activeBeban === null) return;
+  if (!pengujianAktif) return;
 
-    // jangan simpan jika ESP offline
-    if (data.status === "ESP_OFFLINE") return;
+  if (activeBeban === null) return;
 
-    const store = getBebanStore(activeBeban);
+  const store = getBebanStore(activeBeban);
 
-    const now = new Date().toLocaleTimeString(
-        "id-ID",
-        { hour12: false }
-    );
+  const now = new Date().toLocaleTimeString('id-ID', {
+      hour12:false
+  });
 
-    store.power.push(Number(data.power));
-    store.current.push(Number(data.current));
-    store.voltage.push(Number(data.voltage));
-    store.labels.push(now);
+  store.power.push(data.power);
+  store.current.push(data.current);
+  store.voltage.push(data.voltage);
+  store.labels.push(now);
 
-    if (store.power.length > 180) {
-        store.power.shift();
-        store.current.shift();
-        store.voltage.shift();
-        store.labels.shift();
-    }
+  console.log("DATA TERSIMPAN =", store.power.length);
 
+  if (store.power.length > 180) {
+      store.power.shift();
+      store.current.shift();
+      store.voltage.shift();
+      store.labels.shift();
+  }
 }
 
 /* ── CHART INSTANCES ─────────────────────────────────────── */
@@ -1219,6 +1221,14 @@ async function selesaiPengujian() {
 
     const store = getBebanStore(activeBeban);
 
+    // Tambahkan di sini
+    console.log("STORE =", store);
+    console.log("POWER =", store.power);
+    console.log("CURRENT =", store.current);
+    console.log("VOLTAGE =", store.voltage);
+    console.log("LABELS =", store.labels);
+    console.log("JUMLAH DATA =", store.power.length);
+
     const hasil = [];
 
     for (let i = 0; i < store.power.length; i++) {
@@ -1232,32 +1242,33 @@ async function selesaiPengujian() {
 
     }
 
+    console.log("DATA YANG DIKIRIM =", hasil);
+
     try {
 
         console.log("BASE_URL =", BASE_URL);
-console.log("Kirim ke =", `${BASE_URL}/api/save-pengujian`);
+        console.log("Kirim ke =", `${BASE_URL}/api/save-pengujian`);
 
-const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
-    method: "POST",
-    headers:{
-        "Content-Type":"application/json"
-    },
-    body: JSON.stringify({
-        namaAlat: store.namaAlat,
-        data: hasil
-    })
-});
+        const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
+            method: "POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body: JSON.stringify({
+                namaAlat: store.namaAlat,
+                data: hasil
+            })
+        });
 
-console.log("STATUS =", res.status);
-console.log("OK =", res.ok);
+        console.log("STATUS =", res.status);
+        console.log("OK =", res.ok);
 
-const result = await res.json();
-console.log(result);
+        const result = await res.json();
+        console.log(result);
 
         showToast("Pengujian berhasil disimpan");
 
-    }
-    catch(err){
+    } catch(err){
 
         console.error(err);
 
