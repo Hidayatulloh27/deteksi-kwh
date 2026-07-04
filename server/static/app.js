@@ -1349,48 +1349,30 @@ async function selesaiPengujian() {
 
     try {
 
-        // ==========================
-        // 1. Simpan CSV ke server
-        // ==========================
+        // Simpan ke server
         const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
-
             method: "POST",
-
             headers: {
                 "Content-Type": "application/json"
             },
-
             body: JSON.stringify({
-
                 namaAlat: store.namaAlat,
-
                 data: hasil
-
             })
-
         });
 
         const result = await res.json();
 
         console.log(result);
 
-        // ==========================
-        // 2. Download Excel
-        // ==========================
+        if (!result.success) {
+            throw new Error(result.error || "Gagal menyimpan ke server");
+        }
+
+        // Download Excel
         downloadExcel(store.namaAlat, hasil);
 
-        const powerChart = document
-    .getElementById("bebanPowerChart")
-    .toDataURL("image/png");
-
-        const currentChart = document
-    .getElementById("bebanCurrentChart")
-    .toDataURL("image/png");
-    const logo =
-document.getElementById("logoUniversitas");
-        // ==========================
-        // 3. Download PDF
-        // ==========================
+        // Download PDF
         await downloadPDF(store.namaAlat, hasil);
 
         showToast("Pengujian berhasil disimpan");
@@ -1456,55 +1438,34 @@ function downloadExcel(namaAlat, data){
 
     ];
 
-    const body = data.map((d,i)=>[
-    i+1,
-    d.waktu,
-    Number(d.voltage).toFixed(1),
-    Number(d.current).toFixed(3),
-    Number(d.power).toFixed(2)
-]);
+    data.forEach((d,i)=>{
 
-doc.autoTable({
-
-    startY:y,
-
-    head:[[
-        "No",
-        "Waktu",
-        "Volt",
-        "Arus",
-        "Daya"
-    ]],
-
-    body:body,
-
-    theme:"grid",
-
-    headStyles:{
-
-        fillColor:[0,102,204],
-
-        textColor:255,
-
-        halign:"center"
-
-    },
-
-    styles:{
-
-        fontSize:9,
-
-        halign:"center"
-
-    },
-
-    alternateRowStyles:{
-
-        fillColor:[245,245,245]
-
-    }
+    wsData.push([
+        i+1,
+        d.waktu,
+        Number(d.voltage).toFixed(1),
+        Number(d.current).toFixed(3),
+        Number(d.power).toFixed(2)
+    ]);
 
 });
+const wb = XLSX.utils.book_new();
+
+const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    "Pengujian"
+);
+
+XLSX.writeFile(
+    wb,
+    namaAlat.replace(/\s+/g,"_")+
+    "_"+
+    new Date().toISOString().slice(0,19).replace(/:/g,"-")+
+    ".xlsx"
+);
 
     const wb = XLSX.utils.book_new();
 
@@ -1954,6 +1915,7 @@ y
     //------------------------------------------
     // TANDA TANGAN
     //------------------------------------------
+
 
     doc.setFont("helvetica","normal");
 
