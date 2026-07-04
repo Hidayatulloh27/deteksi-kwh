@@ -36,6 +36,9 @@ print("⚠ Firebase sementara dimatikan")
 # =========================
 DATA_DIR = "data"
 CSV_FILE = os.path.join(DATA_DIR, "data.csv")
+TEST_DIR = os.path.join(DATA_DIR, "pengujian")
+
+os.makedirs(TEST_DIR, exist_ok=True)
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -212,6 +215,11 @@ def api_update():
         }), 500
 
 # =========================
+# =========================
+# SAVE HASIL PENGUJIAN
+# =========================
+TEST_DIR = os.path.join(DATA_DIR, "pengujian")
+os.makedirs(TEST_DIR, exist_ok=True)
 # CEK CSV
 # =========================
 @app.route('/api/csv')
@@ -334,6 +342,49 @@ def save_token():
         }), 500
     
 # =========================
+# =========================
+# =========================
+# SAVE HASIL PENGUJIAN
+# =========================
+@app.route("/api/save-pengujian", methods=["POST"])
+def save_pengujian():
+
+    try:
+
+        data = request.get_json()
+
+        nama_alat = data.get("namaAlat", "Tanpa_Nama")
+        hasil = data.get("data", [])
+
+        folder = os.path.join(DATA_DIR, "pengujian")
+        os.makedirs(folder, exist_ok=True)
+
+        nama_file = (
+            nama_alat.replace(" ", "_") +
+            "_" +
+            datetime.now().strftime("%Y%m%d_%H%M%S") +
+            ".csv"
+        )
+
+        file_path = os.path.join(folder, nama_file)
+
+        pd.DataFrame(hasil).to_csv(file_path, index=False)
+
+        print("✅ HASIL PENGUJIAN DISIMPAN :", file_path)
+
+        return jsonify({
+            "success": True,
+            "file": nama_file
+        })
+
+    except Exception as e:
+
+        print("❌ SAVE ERROR :", e)
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 # RUN
 # =========================
 if __name__ == '__main__':

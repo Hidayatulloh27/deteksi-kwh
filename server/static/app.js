@@ -1210,17 +1210,64 @@ fetch(`${BASE_URL}/api/latest`)
   .then(data => console.log("API CONNECT:", data))
   .catch(err => console.log("API ERROR:", err));
 
-function selesaiPengujian() {
+async function selesaiPengujian() {
+
+    if (activeBeban === null) {
+        showToast("Tidak ada beban yang sedang diuji");
+        return;
+    }
+
+    const store = getBebanStore(activeBeban);
+
+    const hasil = [];
+
+    for (let i = 0; i < store.power.length; i++) {
+
+        hasil.push({
+            waktu: store.labels[i],
+            power: store.power[i],
+            current: store.current[i],
+            voltage: store.voltage[i]
+        });
+
+    }
+
+    try {
+
+        console.log("BASE_URL =", BASE_URL);
+console.log("Kirim ke =", `${BASE_URL}/api/save-pengujian`);
+
+const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
+    method: "POST",
+    headers:{
+        "Content-Type":"application/json"
+    },
+    body: JSON.stringify({
+        namaAlat: store.namaAlat,
+        data: hasil
+    })
+});
+
+console.log("STATUS =", res.status);
+console.log("OK =", res.ok);
+
+const result = await res.json();
+console.log(result);
+
+        showToast("Pengujian berhasil disimpan");
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        showToast("Gagal menyimpan");
+
+    }
 
     pengujianAktif = false;
-
     testingActive = false;
-
     activeAlat = null;
-
-    namaAlatAktif = "";
-
-    showToast("Pengujian selesai");
 
 }
 async function resetProteksi() {
