@@ -1335,6 +1335,13 @@ async function selesaiPengujian() {
         // ==========================
         downloadExcel(store.namaAlat, hasil);
 
+        const powerChart = document
+    .getElementById("bebanPowerChart")
+    .toDataURL("image/png");
+
+        const currentChart = document
+    .getElementById("bebanCurrentChart")
+    .toDataURL("image/png");
         // ==========================
         // 3. Download PDF
         // ==========================
@@ -1443,8 +1450,31 @@ async function downloadPDF(namaAlat, data){
 
     const { jsPDF } = window.jspdf;
 
-    const pdf = new jsPDF("p","mm","a4");
+    const doc = new jsPDF("p","mm","a4");
+    //==============================
+// UKURAN HALAMAN
+//==============================
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
+    const marginLeft = 15;
+    const marginRight = 15;
+
+    const contentWidth = pageWidth - marginLeft - marginRight;
+    //==============================
+    // AMBIL GRAFIK DARI CHART.JS
+    //==============================
+
+    const powerChart =
+    document.getElementById("bebanPowerChart")
+    .toDataURL("image/png");
+
+    const currentChart =
+    document.getElementById("bebanCurrentChart")
+    .toDataURL("image/png");
+        let y = 20;
+    const logo =
+document.getElementById("picture1.png");
     const avgPower =
         (data.reduce((a,b)=>a+b.power,0)/data.length).toFixed(2);
 
@@ -1459,64 +1489,175 @@ async function downloadPDF(namaAlat, data){
 
     const minPower =
         Math.min(...data.map(d=>d.power)).toFixed(2);
+    
+    doc.setFont("helvetica","bold");
+doc.setFontSize(18);
 
-    pdf.setFontSize(18);
-    pdf.text("HASIL PENGUJIAN SISTEM IoT",105,20,{align:"center"});
+doc.text(
+"HASIL PENGUJIAN SISTEM IoT",
+pageWidth/2,
+y,
+{align:"center"}
+);
 
-    pdf.setFontSize(14);
-    pdf.text("Deteksi Anomali Konsumsi Daya Listrik",105,28,{align:"center"});
+y+=8;
 
-    pdf.setFontSize(11);
+doc.setFontSize(13);
 
-    pdf.text("Nama Alat : "+namaAlat,20,45);
+doc.text(
+"Deteksi Anomali Konsumsi Daya Listrik",
+pageWidth/2,
+y,
+{align:"center"}
+);
 
-    pdf.text(
-        "Tanggal : "+
-        new Date().toLocaleDateString("id-ID"),
-        20,
-        52
-    );
+y+=12;
+doc.setFontSize(11);
+doc.setFont("helvetica","normal");
 
-    pdf.text(
-        "Jam : "+
-        new Date().toLocaleTimeString("id-ID"),
-        20,
-        59
-    );
+doc.text("Nama Alat : "+namaAlat,15,y);
+y+=7;
 
-    pdf.line(20,65,190,65);
+doc.text("Tanggal : "+new Date().toLocaleDateString(),15,y);
+y+=7;
 
-    pdf.text("STATISTIK",20,75);
+doc.text("Jam : "+new Date().toLocaleTimeString(),15,y);
+y+=12;
 
-    pdf.text("Jumlah Data : "+data.length,25,84);
+   doc.setFont("helvetica","bold");
 
-    pdf.text("Daya Rata-rata : "+avgPower+" W",25,91);
+doc.text("STATISTIK PENGUJIAN",15,y);
 
-    pdf.text("Daya Maksimum : "+maxPower+" W",25,98);
+y+=8;
 
-    pdf.text("Daya Minimum : "+minPower+" W",25,105);
+doc.setFont("helvetica","normal");
 
-    pdf.text("Arus Rata-rata : "+avgCurrent+" A",25,112);
+doc.text("Jumlah Data : "+data.length,15,y);
+y+=6;
 
-    pdf.text("Tegangan Rata-rata : "+avgVoltage+" V",25,119);
+doc.text("Daya Rata-rata : "+avgPower.toFixed(2)+" W",15,y);
+y+=6;
 
-    pdf.line(20,125,190,125);
+doc.text("Daya Maksimum : "+maxPower.toFixed(2)+" W",15,y);
+y+=6;
 
-    pdf.text("DATA PENGUJIAN",20,135);
+doc.text("Daya Minimum : "+minPower.toFixed(2)+" W",15,y);
+y+=12;
+
+doc.setFontSize(13);
+doc.setFont("helvetica","bold");
+
+doc.setTextColor(255,120,0);
+
+doc.text(
+"Grafik Daya",
+pageWidth/2,
+y,
+{align:"center"}
+);
+
+y+=8;
+
+doc.addImage(
+powerChart,
+"PNG",
+marginLeft,
+y,
+contentWidth,
+60
+);
+
+y+=70;
+doc.setTextColor(0,90,255);
+
+doc.text(
+"Grafik Arus",
+pageWidth/2,
+y,
+{align:"center"}
+);
+
+y+=8;
+
+doc.addImage(
+currentChart,
+"PNG",
+marginLeft,
+y,
+contentWidth,
+60
+);
+
+y+=70;
+doc.addPage();
+
+y=20;
+
+doc.setFontSize(16);
+doc.setFont("helvetica","bold");
+
+doc.text(
+"KESIMPULAN",
+pageWidth/2,
+20,
+{align:"center"}
+);
+
+doc.setFontSize(11);
+
+doc.setFont("helvetica","normal");
+
+doc.text(
+`Pengujian pada beban ${namaAlat}
+menunjukkan sistem bekerja dengan baik.
+Tidak ditemukan anomali selama proses pengujian.
+
+Rata-rata daya yang dihasilkan sebesar
+${avgPower.toFixed(2)} Watt.`,
+20,
+40
+);
+
+doc.text(
+"Mengetahui,",
+150,
+220
+);
+
+doc.text(
+"Penguji",
+150,
+227
+);
+
+doc.line(
+145,
+260,
+190,
+260
+);
+
+    doc.text("Arus Rata-rata : "+avgCurrent+" A",25,112);
+
+    doc.text("Tegangan Rata-rata : "+avgVoltage+" V",25,119);
+
+    doc.line(20,125,190,125);
+
+    doc.text("DATA PENGUJIAN",20,135);
 
     let y=145;
 
-    pdf.setFontSize(9);
+    doc.setFontSize(9);
 
-    pdf.text("No",20,y);
+    doc.text("No",20,y);
 
-    pdf.text("Waktu",35,y);
+    doc.text("Waktu",35,y);
 
-    pdf.text("Volt",75,y);
+    doc.text("Volt",75,y);
 
-    pdf.text("Arus",105,y);
+    doc.text("Arus",105,y);
 
-    pdf.text("Daya",145,y);
+    doc.text("Daya",145,y);
 
     y+=6;
 
@@ -1524,27 +1665,27 @@ async function downloadPDF(namaAlat, data){
 
         if(y>280){
 
-            pdf.addPage();
+            doc.addPage();
 
             y=20;
 
         }
 
-        pdf.text(String(i+1),20,y);
+        doc.text(String(i+1),20,y);
 
-        pdf.text(d.waktu,35,y);
+        doc.text(d.waktu,35,y);
 
-        pdf.text(String(d.voltage),75,y);
+        doc.text(String(d.voltage),75,y);
 
-        pdf.text(String(d.current),105,y);
+        doc.text(String(d.current),105,y);
 
-        pdf.text(String(d.power),145,y);
+        doc.text(String(d.power),145,y);
 
         y+=6;
 
     });
 
-    pdf.save(
+    doc.save(
         namaAlat.replace(/\s+/g,"_")+
         ".pdf"
     );
