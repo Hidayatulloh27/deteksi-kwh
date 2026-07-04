@@ -1534,7 +1534,141 @@ async function downloadPDF(namaAlat, data){
 
     const minPower =
         Math.min(...data.map(d=>d.power));
+    //------------------------------------------------
+// RULE BASED ANALYSIS
+//------------------------------------------------
 
+let normalCount = 0;
+let warningCount = 0;
+let highCount = 0;
+let shortCount = 0;
+
+data.forEach(d=>{
+
+    if(d.power < CFG.warnPower){
+
+        normalCount++;
+
+    }
+
+    else if(d.power < CFG.highPower){
+
+        warningCount++;
+
+    }
+
+    else if(d.power < CFG.shortPower){
+
+        highCount++;
+
+    }
+
+    else{
+
+        shortCount++;
+
+    }
+
+});
+let finalStatus = "NORMAL";
+
+if(shortCount>0){
+
+    finalStatus="SHORT CIRCUIT";
+
+}
+else if(highCount>0){
+
+    finalStatus="HIGH CONSUMPTION";
+
+}
+else if(warningCount>0){
+
+    finalStatus="WARNING";
+
+}
+const confidence = (
+
+Math.max(
+
+normalCount,
+warningCount,
+highCount,
+shortCount
+
+)
+
+/
+
+data.length
+
+*100
+
+).toFixed(2);
+
+//------------------------------------------------
+// TEMPORAL PATTERN ANALYSIS
+//------------------------------------------------
+
+let deltaP = [];
+
+for(let i=1;i<data.length;i++){
+
+    deltaP.push(
+        Number(data[i].power) -
+        Number(data[i-1].power)
+    );
+
+}
+
+const maxDelta =
+deltaP.length>0 ?
+Math.max(...deltaP).toFixed(2)
+:0;
+
+const minDelta =
+deltaP.length>0 ?
+Math.min(...deltaP).toFixed(2)
+:0;
+
+const maxAbsDelta =
+deltaP.length>0 ?
+Math.max(...deltaP.map(v=>Math.abs(v))).toFixed(2)
+:0;
+
+//------------------------------------------------
+// KEPUTUSAN SISTEM
+//------------------------------------------------
+
+let keputusan = "";
+
+if(finalStatus==="NORMAL"){
+
+    keputusan =
+    "Tidak ditemukan anomali konsumsi daya listrik.";
+
+}
+
+else if(finalStatus==="WARNING"){
+
+    keputusan =
+    "Terdapat kenaikan konsumsi daya. Disarankan melakukan pemantauan.";
+
+}
+
+else if(finalStatus==="HIGH CONSUMPTION"){
+
+    keputusan =
+    "Beban termasuk kategori konsumsi daya tinggi.";
+
+}
+
+else{
+
+    keputusan =
+    "Terindikasi SHORT CIRCUIT. Segera matikan sumber listrik.";
+
+}
     //-----------------------------
     // WATERMARK
     //-----------------------------
@@ -1709,6 +1843,202 @@ doc.setDrawColor(0,102,204);
 
     y += 15;
 
+    //--------------------------------------
+// HASIL ANALISIS SISTEM
+//--------------------------------------
+
+y += 15;
+
+doc.setFont("helvetica","bold");
+doc.setFontSize(13);
+
+doc.setTextColor(0,0,0);
+
+doc.text(
+"HASIL ANALISIS SISTEM DETEKSI",
+margin,
+y
+);
+
+y += 8;
+
+doc.setFont("helvetica","normal");
+doc.setFontSize(11);
+
+doc.text(
+"Status Sistem",
+margin,
+y
+);
+
+doc.text(
+": "+finalStatus,
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"Confidence Level",
+margin,
+y
+);
+
+doc.text(
+": "+confidence+" %",
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"Normal",
+margin,
+y
+);
+
+doc.text(
+": "+normalCount,
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"Warning",
+margin,
+y
+);
+
+doc.text(
+": "+warningCount,
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"High Consumption",
+margin,
+y
+);
+
+doc.text(
+": "+highCount,
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"Short Circuit",
+margin,
+y
+);
+
+doc.text(
+": "+shortCount,
+70,
+y
+);
+
+y += 15;
+//--------------------------------------
+// TEMPORAL PATTERN
+//--------------------------------------
+
+doc.setFont("helvetica","bold");
+
+doc.text(
+"TEMPORAL PATTERN ANALYSIS",
+margin,
+y
+);
+
+y+=8;
+
+doc.setFont("helvetica","normal");
+
+doc.text(
+"ΔP Maksimum",
+margin,
+y
+);
+
+doc.text(
+": "+maxDelta+" Watt",
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"ΔP Minimum",
+margin,
+y
+);
+
+doc.text(
+": "+minDelta+" Watt",
+70,
+y
+);
+
+y+=6;
+
+doc.text(
+"Perubahan Terbesar",
+margin,
+y
+);
+
+doc.text(
+": "+maxAbsDelta+" Watt",
+70,
+y
+);
+
+y+=15;
+
+//--------------------------------------
+// KEPUTUSAN SISTEM
+//--------------------------------------
+
+doc.setFont("helvetica","bold");
+
+doc.text(
+"KEPUTUSAN SISTEM",
+margin,
+y
+);
+
+y+=8;
+
+doc.setFont("helvetica","normal");
+
+doc.text(
+
+keputusan,
+
+margin,
+
+y,
+
+{
+
+maxWidth:170
+
+}
+
+);
+
+y+=20;
     //-----------------------------
     // GRAFIK DAYA
     //-----------------------------
