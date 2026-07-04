@@ -1212,6 +1212,73 @@ fetch(`${BASE_URL}/api/latest`)
   .then(data => console.log("API CONNECT:", data))
   .catch(err => console.log("API ERROR:", err));
 
+function downloadCSV(namaAlat, data) {
+
+    if (!data.length) {
+        showToast("Tidak ada data");
+        return;
+    }
+
+    const avgPower =
+        (data.reduce((a,b)=>a+b.power,0)/data.length).toFixed(2);
+
+    const avgCurrent =
+        (data.reduce((a,b)=>a+b.current,0)/data.length).toFixed(3);
+
+    const avgVoltage =
+        (data.reduce((a,b)=>a+b.voltage,0)/data.length).toFixed(2);
+
+    const maxPower =
+        Math.max(...data.map(d=>d.power)).toFixed(2);
+
+    const minPower =
+        Math.min(...data.map(d=>d.power)).toFixed(2);
+
+    let csv = "";
+
+    csv += "HASIL PENGUJIAN BEBAN\n\n";
+
+    csv += `Nama Alat,${namaAlat}\n`;
+    csv += `Tanggal,${new Date().toLocaleDateString("id-ID")}\n`;
+    csv += `Jam,${new Date().toLocaleTimeString("id-ID")}\n\n`;
+
+    csv += `Jumlah Data,${data.length}\n`;
+    csv += `Daya Rata-rata (W),${avgPower}\n`;
+    csv += `Daya Maksimum (W),${maxPower}\n`;
+    csv += `Daya Minimum (W),${minPower}\n`;
+    csv += `Arus Rata-rata (A),${avgCurrent}\n`;
+    csv += `Tegangan Rata-rata (V),${avgVoltage}\n\n`;
+
+    csv += "DATA PENGUJIAN\n\n";
+
+    csv += "No,Waktu,Tegangan(V),Arus(A),Daya(W)\n";
+
+    data.forEach((d,i)=>{
+
+        csv += `${i+1},${d.waktu},${d.voltage},${d.current},${d.power}\n`;
+
+    });
+
+    const blob = new Blob([csv],{
+        type:"text/csv;charset=utf-8;"
+    });
+
+    const link=document.createElement("a");
+
+    link.href=URL.createObjectURL(blob);
+
+    link.download=
+        namaAlat.replace(/\s+/g,"_")+
+        "_"+
+        new Date().toISOString().slice(0,19).replace(/:/g,"-")+
+        ".csv";
+
+    link.click();
+
+    URL.revokeObjectURL(link.href);
+
+}
+
 async function selesaiPengujian() {
 
     if (activeBeban === null) {
@@ -1246,39 +1313,102 @@ async function selesaiPengujian() {
 
     try {
 
-        console.log("BASE_URL =", BASE_URL);
-        console.log("Kirim ke =", `${BASE_URL}/api/save-pengujian`);
+    console.log("DATA YANG DIKIRIM =", hasil);
 
-        const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
-            method: "POST",
-            headers:{
-                "Content-Type":"application/json"
-            },
-            body: JSON.stringify({
-                namaAlat: store.namaAlat,
-                data: hasil
-            })
-        });
+    downloadExcel(store.namaAlat, hasil);
 
-        console.log("STATUS =", res.status);
-        console.log("OK =", res.ok);
+    showToast("Hasil pengujian berhasil diunduh");
 
-        const result = await res.json();
-        console.log(result);
+}
+catch(err){
 
-        showToast("Pengujian berhasil disimpan");
+    console.error(err);
 
-    } catch(err){
+    showToast("Gagal membuat file CSV");
 
-        console.error(err);
-
-        showToast("Gagal menyimpan");
-
-    }
+}
 
     pengujianAktif = false;
     testingActive = false;
     activeAlat = null;
+
+}
+function downloadExcel(namaAlat, data){
+
+    if(data.length===0){
+        showToast("Tidak ada data");
+        return;
+    }
+
+    const avgPower =
+        (data.reduce((a,b)=>a+b.power,0)/data.length).toFixed(2);
+
+    const avgCurrent =
+        (data.reduce((a,b)=>a+b.current,0)/data.length).toFixed(3);
+
+    const avgVoltage =
+        (data.reduce((a,b)=>a+b.voltage,0)/data.length).toFixed(2);
+
+    const maxPower =
+        Math.max(...data.map(d=>d.power)).toFixed(2);
+
+    const minPower =
+        Math.min(...data.map(d=>d.power)).toFixed(2);
+
+    const wsData = [
+
+        ["HASIL PENGUJIAN BEBAN"],
+
+        [],
+
+        ["Nama Alat", namaAlat],
+        ["Tanggal", new Date().toLocaleDateString("id-ID")],
+        ["Jam", new Date().toLocaleTimeString("id-ID")],
+
+        [],
+
+        ["Jumlah Data", data.length],
+        ["Daya Rata-rata (W)", avgPower],
+        ["Daya Maksimum (W)", maxPower],
+        ["Daya Minimum (W)", minPower],
+        ["Arus Rata-rata (A)", avgCurrent],
+        ["Tegangan Rata-rata (V)", avgVoltage],
+
+        [],
+
+        ["No","Waktu","Tegangan(V)","Arus(A)","Daya(W)"]
+
+    ];
+
+    data.forEach((d,i)=>{
+
+        wsData.push([
+            i+1,
+            d.waktu,
+            d.voltage,
+            d.current,
+            d.power
+        ]);
+
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    XLSX.utils.book_append_sheet(
+        wb,
+        ws,
+        "Pengujian"
+    );
+
+    XLSX.writeFile(
+        wb,
+        namaAlat.replace(/\s+/g,"_")+
+        "_" +
+        new Date().toISOString().slice(0,19).replace(/:/g,"-")+
+        ".xlsx"
+    );
 
 }
 async function resetProteksi() {
