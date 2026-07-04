@@ -1288,45 +1288,68 @@ async function selesaiPengujian() {
 
     const store = getBebanStore(activeBeban);
 
-    // Tambahkan di sini
-    console.log("STORE =", store);
-    console.log("POWER =", store.power);
-    console.log("CURRENT =", store.current);
-    console.log("VOLTAGE =", store.voltage);
-    console.log("LABELS =", store.labels);
-    console.log("JUMLAH DATA =", store.power.length);
-
     const hasil = [];
 
     for (let i = 0; i < store.power.length; i++) {
 
         hasil.push({
             waktu: store.labels[i],
-            power: store.power[i],
+            voltage: store.voltage[i],
             current: store.current[i],
-            voltage: store.voltage[i]
+            power: store.power[i]
         });
 
     }
 
-    console.log("DATA YANG DIKIRIM =", hasil);
+    console.log("DATA =", hasil);
 
     try {
 
-    console.log("DATA YANG DIKIRIM =", hasil);
+        // ==========================
+        // 1. Simpan CSV ke server
+        // ==========================
+        const res = await fetch(`${BASE_URL}/api/save-pengujian`, {
 
-    downloadExcel(store.namaAlat, hasil);
+            method: "POST",
 
-    showToast("Hasil pengujian berhasil diunduh");
+            headers: {
+                "Content-Type": "application/json"
+            },
 
-}
-catch(err){
+            body: JSON.stringify({
 
-    console.error(err);
+                namaAlat: store.namaAlat,
 
-    showToast("Gagal membuat file CSV");
+                data: hasil
 
-}
+            })
+
+        });
+
+        const result = await res.json();
+
+        console.log(result);
+
+        // ==========================
+        // 2. Download Excel
+        // ==========================
+        downloadExcel(store.namaAlat, hasil);
+
+        // ==========================
+        // 3. Download PDF
+        // ==========================
+        await downloadPDF(store.namaAlat, hasil);
+
+        showToast("Pengujian berhasil disimpan");
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        showToast("Gagal menyimpan");
+
+    }
 
     pengujianAktif = false;
     testingActive = false;
@@ -1408,6 +1431,122 @@ function downloadExcel(namaAlat, data){
         "_" +
         new Date().toISOString().slice(0,19).replace(/:/g,"-")+
         ".xlsx"
+    );
+
+}
+async function downloadPDF(namaAlat, data){
+
+    if(data.length===0){
+        showToast("Tidak ada data");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+
+    const pdf = new jsPDF("p","mm","a4");
+
+    const avgPower =
+        (data.reduce((a,b)=>a+b.power,0)/data.length).toFixed(2);
+
+    const avgCurrent =
+        (data.reduce((a,b)=>a+b.current,0)/data.length).toFixed(3);
+
+    const avgVoltage =
+        (data.reduce((a,b)=>a+b.voltage,0)/data.length).toFixed(2);
+
+    const maxPower =
+        Math.max(...data.map(d=>d.power)).toFixed(2);
+
+    const minPower =
+        Math.min(...data.map(d=>d.power)).toFixed(2);
+
+    pdf.setFontSize(18);
+    pdf.text("HASIL PENGUJIAN SISTEM IoT",105,20,{align:"center"});
+
+    pdf.setFontSize(14);
+    pdf.text("Deteksi Anomali Konsumsi Daya Listrik",105,28,{align:"center"});
+
+    pdf.setFontSize(11);
+
+    pdf.text("Nama Alat : "+namaAlat,20,45);
+
+    pdf.text(
+        "Tanggal : "+
+        new Date().toLocaleDateString("id-ID"),
+        20,
+        52
+    );
+
+    pdf.text(
+        "Jam : "+
+        new Date().toLocaleTimeString("id-ID"),
+        20,
+        59
+    );
+
+    pdf.line(20,65,190,65);
+
+    pdf.text("STATISTIK",20,75);
+
+    pdf.text("Jumlah Data : "+data.length,25,84);
+
+    pdf.text("Daya Rata-rata : "+avgPower+" W",25,91);
+
+    pdf.text("Daya Maksimum : "+maxPower+" W",25,98);
+
+    pdf.text("Daya Minimum : "+minPower+" W",25,105);
+
+    pdf.text("Arus Rata-rata : "+avgCurrent+" A",25,112);
+
+    pdf.text("Tegangan Rata-rata : "+avgVoltage+" V",25,119);
+
+    pdf.line(20,125,190,125);
+
+    pdf.text("DATA PENGUJIAN",20,135);
+
+    let y=145;
+
+    pdf.setFontSize(9);
+
+    pdf.text("No",20,y);
+
+    pdf.text("Waktu",35,y);
+
+    pdf.text("Volt",75,y);
+
+    pdf.text("Arus",105,y);
+
+    pdf.text("Daya",145,y);
+
+    y+=6;
+
+    data.forEach((d,i)=>{
+
+        if(y>280){
+
+            pdf.addPage();
+
+            y=20;
+
+        }
+
+        pdf.text(String(i+1),20,y);
+
+        pdf.text(d.waktu,35,y);
+
+        pdf.text(String(d.voltage),75,y);
+
+        pdf.text(String(d.current),105,y);
+
+        pdf.text(String(d.power),145,y);
+
+        y+=6;
+
+    });
+
+    pdf.save(
+        namaAlat.replace(/\s+/g,"_")+
+        ".pdf"
     );
 
 }
