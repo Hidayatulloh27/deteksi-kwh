@@ -142,37 +142,36 @@ function getBebanStore(idx) {
 }
 
 // Dipanggil setiap tick — hanya simpan ke beban aktif
-
 function recordToActiveBeban(data) {
 
-  if (!pengujianAktif) return;
+    // hanya saat pengujian aktif
+    if (!pengujianAktif) return;
 
-  if (activeBeban === null) return;
+    // harus ada beban yang dipilih
+    if (activeBeban === null) return;
 
-  console.log("DATA MASUK:", data.power);
+    // jangan simpan jika ESP offline
+    if (data.status === "ESP_OFFLINE") return;
 
-  const store = getBebanStore(activeBeban);
+    const store = getBebanStore(activeBeban);
 
-  const now = new Date().toLocaleTimeString(
-      'id-ID',
-      { hour12:false }
-  );
+    const now = new Date().toLocaleTimeString(
+        "id-ID",
+        { hour12: false }
+    );
 
-  store.power.push(data.power);
-  store.current.push(data.current);
-  store.voltage.push(data.voltage);
-  store.labels.push(now);
+    store.power.push(Number(data.power));
+    store.current.push(Number(data.current));
+    store.voltage.push(Number(data.voltage));
+    store.labels.push(now);
 
+    if (store.power.length > 180) {
+        store.power.shift();
+        store.current.shift();
+        store.voltage.shift();
+        store.labels.shift();
+    }
 
-
-  if (store.power.length > 180) {
-
-      store.power.shift();
-      store.current.shift();
-      store.voltage.shift();
-      store.labels.shift();
-
-  }
 }
 
 /* ── CHART INSTANCES ─────────────────────────────────────── */
@@ -375,11 +374,17 @@ if (voltage < 10) {
 }
 
     const cyclingDetected = detectCycling(power);
-    let finalStatus = classifyStatus(power, current, voltage);
-    if (cyclingDetected && finalStatus !== 'ESP_OFFLINE') finalStatus = 'CYCLING_DETECTED';
-    const relayState =
-    finalStatus === 'SHORT_CIRCUIT' ||
-    finalStatus === 'HIGH_CONSUMPTION';
+
+    // Gunakan status dari ESP32
+    let finalStatus = data.status || "NORMAL";
+
+    // Jika Javascript mendeteksi cycling sementara status masih NORMAL
+    if (cyclingDetected && finalStatus === "NORMAL") {
+        finalStatus = "CYCLING_DETECTED";
+    }
+
+    // Gunakan status relay dari ESP32
+    const relayState = data.relay;
     return {
       voltage,
       current,
@@ -389,9 +394,9 @@ if (voltage < 10) {
       kwh: kwh,
       status: finalStatus,
       relay: relayState,
-      pln: voltage > 100,
-      deltaP: Number((power - lastPower).toFixed(2)),
-      cycling: cyclingDetected,
+      pln: data.pln,
+      deltaP: Number(data.deltaPower || 0),
+      cycling: data.deviceCycling || cyclingDetected,
       cycleCount: cycleTransitions,
       cyclePeriod: data.cyclePeriod || null
     };
@@ -508,14 +513,14 @@ function updateStatusBadge(data) {
   }
 
   const plnPill = document.getElementById('plnPill');
-  const plnActive = data.voltage > 100;
+  const plnActive = data.pln;
 
   if (plnActive) {
-    plnPill.textContent = 'PLN MENYALA';
-    plnPill.className = 'pln-pill';
+      plnPill.textContent = 'PLN MENYALA';
+      plnPill.className = 'pln-pill';
   } else {
-    plnPill.textContent = 'PLN MATI';
-    plnPill.className = 'pln-pill off';
+      plnPill.textContent = 'PLN MATI';
+      plnPill.className = 'pln-pill off';
   }
 }
 
@@ -533,14 +538,42 @@ function updateMainChart(power) {
 }
 
 function updateDetectionPanel(data) {
-  const dp = data.deltaP || 0;
+
+  const dp = Number(data.deltaP || 0);
+
   setEl('detRule', data.status || 'NORMAL');
-  setEl('detDelta', (dp >= 0 ? '+' : '') + dp.toFixed(2) + ' W/s');
+
+  setEl(
+    'detDelta',
+    (dp >= 0 ? '+' : '') + dp.toFixed(2) + ' W'
+  );
+
   const abnormal = Math.abs(dp) > CFG.tfluk;
-  setElClass('detFluk', abnormal ? 'red' : 'green', abnormal ? 'Ya' : 'Tidak');
-  setElClass('detCycle', data.cycling ? 'amber' : '', data.cycling ? 'Terdeteksi' : 'Tidak ada');
-  setEl('detCycleCount', data.cycleCount || 0);
-  setEl('detCyclePeriod', data.cyclePeriod ? data.cyclePeriod + ' detik' : '— detik');
+
+  setElClass(
+    'detFluk',
+    abnormal ? 'red' : 'green',
+    abnormal ? 'Ya' : 'Tidak'
+  );
+
+  setElClass(
+    'detCycle',
+    data.cycling ? 'amber' : '',
+    data.cycling ? 'Terdeteksi' : 'Tidak ada'
+  );
+
+  setEl(
+    'detCycleCount',
+    data.cycleCount ?? '-'
+  );
+
+  setEl(
+    'detCyclePeriod',
+    data.cyclePeriod
+      ? data.cyclePeriod + ' detik'
+      : '-'
+  );
+
 }
 
 function updateCostPanel(data) {
@@ -555,10 +588,11 @@ function updateCostPanel(data) {
   document.getElementById('costTotal').textContent = rupiah(totalBiaya);
   document.getElementById('costMonth').textContent = rupiah(bulanIni);
   document.getElementById('costPredict').textContent = rupiah(prediksi);
-  const realtimeEl = document.getElementById('costRealtime');
-  if (realtimeEl) realtimeEl.textContent = 'Rp ' + biayaPerDetik.toFixed(6) + '/detik';
+  const realtimeEl =
+  document.getElementById('costRealtimeText');
   const confidence = Number(data.confidence || 0);
   document.getElementById('costConf').textContent =
+"Tidak tersedia";
     confidence + '%';
   const trendBadge = document.getElementById('trendBadge');
   if (data.power > 1500) { trendBadge.textContent = 'TINGGI'; trendBadge.className = 'trend-badge danger'; }
@@ -747,7 +781,7 @@ function selectBeban(idx) {
   // Tampilkan input nama alat
   showNamaInput(idx);
   showBebanChart(idx);
-  showToast(`Beban ${idx + 1}: ${BEBAN_LIST[idx].name} — data monitoring dimulai`);
+  showToast(`Silakan masukkan nama alat lalu klik Mulai Pengujian`);
 }
 
 function mulaiPengujian() {
@@ -767,6 +801,12 @@ function mulaiPengujian() {
   activeAlat = nama;
   testingActive = true;
 
+  const store = getBebanStore(activeBeban);
+
+  store.power = [];
+  store.current = [];
+  store.voltage = [];
+  store.labels = [];
   pengujianAktif = true;
 
   if (activeBeban !== null) {
@@ -955,12 +995,25 @@ function updateBebanRealtime() {
 }
 
 function closeBebanChart() {
-  document.getElementById('bebanChartPanel').style.display = 'none';
-  document.querySelectorAll('.beban-card').forEach(c => c.classList.remove('active-beban'));
-  const namaPanel = document.getElementById('namaAlatPanel');
-  if (namaPanel) namaPanel.remove();
-  activeBeban = null;
-  showToast('Pengujian beban dihentikan');
+
+    selesaiPengujian();
+
+    document.getElementById('bebanChartPanel').style.display = 'none';
+
+    document
+        .querySelectorAll('.beban-card')
+        .forEach(c => c.classList.remove('active-beban'));
+
+    const namaPanel =
+        document.getElementById('namaAlatPanel');
+
+    if (namaPanel)
+        namaPanel.remove();
+
+    activeBeban = null;
+
+    showToast("Pengujian beban dihentikan");
+
 }
 
 /* ── MODAL ───────────────────────────────────────────────── */
@@ -1159,12 +1212,16 @@ fetch(`${BASE_URL}/api/latest`)
 
 function selesaiPengujian() {
 
-  pengujianAktif = false;
+    pengujianAktif = false;
 
-  testingActive = false;
-  activeAlat = null;
+    testingActive = false;
 
-  showToast("Pengujian selesai");
+    activeAlat = null;
+
+    namaAlatAktif = "";
+
+    showToast("Pengujian selesai");
+
 }
 async function resetProteksi() {
 
