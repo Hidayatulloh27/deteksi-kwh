@@ -1337,11 +1337,14 @@ async function selesaiPengujian() {
     for (let i = 0; i < store.power.length; i++) {
 
         hasil.push({
-            waktu: store.labels[i],
-            voltage: store.voltage[i],
-            current: store.current[i],
-            power: store.power[i]
-        });
+        waktu: store.labels[i],
+        voltage: store.voltage[i],
+        current: store.current[i],
+        power: store.power[i],
+
+        status: store.status[i],
+        confidence: store.confidence[i]
+    });
 
     }
 
@@ -1534,42 +1537,63 @@ async function downloadPDF(namaAlat, data){
 
     const minPower =
         Math.min(...data.map(d=>d.power));
+
+    const normal =
+data.filter(d=>d.status==="NORMAL").length;
+
+const warning =
+data.filter(d=>d.status==="WARNING").length;
+
+const high =
+data.filter(d=>d.status==="HIGH_CONSUMPTION").length;
+
+const shortCircuit =
+data.filter(d=>d.status==="SHORT_CIRCUIT").length;
+const normalCount = normal;
+const warningCount = warning;
+const highCount = high;
+const shortCount = shortCircuit;
+
+const total = data.length;
+const pNormal =
+((normalCount/total)*100).toFixed(1);
+
+const pWarning =
+((warningCount/total)*100).toFixed(1);
+
+const pHigh =
+((highCount/total)*100).toFixed(1);
+
+const pShort =
+((shortCount/total)*100).toFixed(1);
+
+const pNormal =
+(normal/total*100).toFixed(1);
+
+const pWarning =
+(warning/total*100).toFixed(1);
+
+const pHigh =
+(high/total*100).toFixed(1);
+
+const pShort =
+(shortCircuit/total*100).toFixed(1);
+
+const confidenceList = data
+    .map(d => Number(d.confidence) || 0);
+
+const avgConfidence =
+confidenceList.reduce((a,b)=>a+b,0) /
+confidenceList.length;
+
+const maxConfidence =
+Math.max(...confidenceList);
+
+const minConfidence =
+Math.min(...confidenceList);
     //------------------------------------------------
 // RULE BASED ANALYSIS
 //------------------------------------------------
-
-let normalCount = 0;
-let warningCount = 0;
-let highCount = 0;
-let shortCount = 0;
-
-data.forEach(d=>{
-
-    if(d.power < CFG.warnPower){
-
-        normalCount++;
-
-    }
-
-    else if(d.power < CFG.highPower){
-
-        warningCount++;
-
-    }
-
-    else if(d.power < CFG.shortPower){
-
-        highCount++;
-
-    }
-
-    else{
-
-        shortCount++;
-
-    }
-
-});
 let finalStatus = "NORMAL";
 
 if(shortCount>0){
@@ -2100,6 +2124,172 @@ y+=20;
 
     y += 70;
 
+    doc.addPage();
+
+y=20;
+
+doc.setFontSize(18);
+
+doc.setFont("helvetica","bold");
+
+doc.text(
+"ANALISIS HASIL PENGUJIAN",
+pageWidth/2,
+20,
+{
+align:"center"
+}
+);
+y+=15;
+
+doc.setFontSize(13);
+
+doc.text(
+"Ringkasan Rule Based Detection",
+15,
+y
+);
+
+y+=10;
+
+doc.setFontSize(11);
+
+doc.text(
+`Normal : ${normalCount} (${pNormal}%)`,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+`Warning : ${warningCount} (${pWarning}%)`,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+`High Consumption : ${highCount} (${pHigh}%)`,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+`Short Circuit : ${shortCount} (${pShort}%)`,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+"Warning              : "+warning,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+"High Consumption     : "+high,
+20,
+y
+);
+
+y+=7;
+
+doc.text(
+"Short Circuit        : "+shortCircuit,
+20,
+y
+);
+y+=15;
+
+doc.setFontSize(13);
+
+doc.text(
+"Confidence Analysis",
+15,
+y
+);
+
+y+=8;
+
+doc.setFontSize(11);
+
+doc.text(
+"Confidence Rata-rata : "+
+avgConfidence.toFixed(2)+" %",
+20,
+y
+);
+
+y+=6;
+
+doc.text(
+"Confidence Maksimum : "+
+maxConfidence.toFixed(2)+" %",
+20,
+y
+);
+
+y+=6;
+
+doc.text(
+"Confidence Minimum : "+
+minConfidence.toFixed(2)+" %",
+20,
+y
+);
+y+=18;
+
+doc.setFontSize(13);
+
+doc.setFont("helvetica","bold");
+
+doc.text(
+"Interpretasi",
+15,
+y
+);
+
+y+=8;
+
+doc.setFont("helvetica","normal");
+
+doc.setFontSize(11);
+
+doc.text(
+
+`Selama pengujian diperoleh ${normal}
+data Normal,
+
+${warning} data Warning,
+
+${high} data High Consumption,
+
+dan ${shortCircuit}
+data Short Circuit.
+
+Nilai confidence rata-rata sebesar
+${avgConfidence.toFixed(2)}%.
+
+Hal ini menunjukkan bahwa
+algoritma Rule Based Detection
+mampu melakukan identifikasi
+kondisi konsumsi energi listrik
+secara konsisten selama proses
+pengujian.`,
+
+20,
+
+y
+
+);
     //-----------------------------
     // HALAMAN BARU
     //-----------------------------
