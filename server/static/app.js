@@ -1258,7 +1258,9 @@ function downloadCSV(namaAlat, data) {
     d.waktu,
     Number(d.voltage).toFixed(1),
     Number(d.current).toFixed(3),
-    Number(d.power).toFixed(2)
+    Number(d.power).toFixed(2),
+    d.status,
+    Number(d.confidence || 0).toFixed(2)
 ]);
 
 doc.autoTable({
@@ -1533,7 +1535,7 @@ async function downloadPDF(namaAlat, data){
         data.reduce((a,b)=>a+b.voltage,0)/data.length;
 
     const maxPower =
-        Math.max(...data.map(d=>d.power));
+        Math.max(...data.map(d=>d.power))
 
     const minPower =
         Math.min(...data.map(d=>d.power));
@@ -1611,24 +1613,8 @@ else if(warningCount>0){
     finalStatus="WARNING";
 
 }
-const confidence = (
-
-Math.max(
-
-normalCount,
-warningCount,
-highCount,
-shortCount
-
-)
-
-/
-
-data.length
-
-*100
-
-).toFixed(2);
+const confidence =
+avgConfidence.toFixed(2);
 
 //------------------------------------------------
 // TEMPORAL PATTERN ANALYSIS
@@ -1706,8 +1692,11 @@ else{
     //-----------------------------
     // HEADER
     //-----------------------------
+const logo =
+document.getElementById("logoUniversitas");
+
 doc.addImage(
-logo,
+logo.src,
 "PNG",
 15,
 10,
@@ -2186,27 +2175,7 @@ y
 
 y+=7;
 
-doc.text(
-"Warning              : "+warning,
-20,
-y
-);
 
-y+=7;
-
-doc.text(
-"High Consumption     : "+high,
-20,
-y
-);
-
-y+=7;
-
-doc.text(
-"Short Circuit        : "+shortCircuit,
-20,
-y
-);
 y+=15;
 
 doc.setFontSize(13);
@@ -2322,7 +2291,9 @@ y
     d.waktu,
     Number(d.voltage).toFixed(1),
     Number(d.current).toFixed(3),
-    Number(d.power).toFixed(2)
+    Number(d.power).toFixed(2),
+    d.status,
+    Number(d.confidence || 0).toFixed(2)
 ]);
 
 doc.autoTable({
@@ -2330,12 +2301,14 @@ doc.autoTable({
     startY:y,
 
     head:[[
-        "No",
-        "Waktu",
-        "Tegangan (V)",
-        "Arus (A)",
-        "Daya (W)"
-    ]],
+  "No",
+  "Waktu",
+  "Tegangan",
+  "Arus",
+  "Daya",
+  "Status",
+  "Confidence (%)"
+  ]],
 
     body:body,
 
@@ -2392,29 +2365,28 @@ doc.autoTable({
 
     doc.text(
 
-`Pengujian terhadap beban ${namaAlat}
-berhasil dilakukan sebanyak ${data.length} kali
-pengambilan data.
+`Selama pengujian diperoleh ${normalCount}
+data Normal,
 
-Berdasarkan hasil pengujian diperoleh:
+${warningCount} data Warning,
 
-• Daya rata-rata : ${avgPower.toFixed(2)} Watt
+${highCount} data High Consumption,
 
-• Daya maksimum : ${maxPower.toFixed(2)} Watt
+dan ${shortCount}
+data Short Circuit.
 
-• Daya minimum : ${minPower.toFixed(2)} Watt
+Nilai confidence rata-rata sebesar
+${avgConfidence.toFixed(2)}%.
 
-• Arus rata-rata : ${avgCurrent.toFixed(3)} A
-
-• Tegangan rata-rata : ${avgVoltage.toFixed(2)} Volt
-
-Selama proses pengujian sistem
-Kupit_Smart IoT Energy Monitor
-mampu melakukan monitoring
-konsumsi energi listrik secara
-real-time dengan baik.`,
+Hal ini menunjukkan bahwa
+algoritma Rule Based Detection
+mampu melakukan identifikasi
+kondisi konsumsi energi listrik
+secara konsisten selama proses
+pengujian.`,
 
 20,
+
 y
 
 );
