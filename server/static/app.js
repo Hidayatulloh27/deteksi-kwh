@@ -129,16 +129,22 @@ function getAlatStore(namaAlat) {
 }
 
 function getBebanStore(idx) {
-  if (!bebanStore[idx]) {
-    bebanStore[idx] = {
-      power:    [],
-      current:  [],
-      voltage:  [],
-      labels:   [],
-      namaAlat: BEBAN_LIST[idx].name,
-    };
-  }
-  return bebanStore[idx];
+
+    if (!bebanStore[idx]) {
+
+        bebanStore[idx] = {
+            power: [],
+            current: [],
+            voltage: [],
+            labels: [],
+            status: [],
+            confidence: [],
+            namaAlat: BEBAN_LIST[idx].name
+        };
+
+    }
+
+    return bebanStore[idx];
 }
 
 // Dipanggil setiap tick — hanya simpan ke beban aktif
@@ -161,19 +167,27 @@ function recordToActiveBeban(data) {
       hour12:false
   });
 
-  store.power.push(data.power);
-  store.current.push(data.current);
-  store.voltage.push(data.voltage);
+  store.power.push(Number(data.power));
+  store.current.push(Number(data.current));
+  store.voltage.push(Number(data.voltage));
   store.labels.push(now);
+
+  store.status.push(data.status || "NORMAL");
+  store.confidence.push(isNaN(data.confidence) ? 0 : data.confidence);
 
   console.log("DATA TERSIMPAN =", store.power.length);
 
   if (store.power.length > 180) {
-      store.power.shift();
-      store.current.shift();
-      store.voltage.shift();
-      store.labels.shift();
-  }
+
+    store.power.shift();
+    store.current.shift();
+    store.voltage.shift();
+    store.labels.shift();
+
+    store.status.shift();
+    store.confidence.shift();
+
+}
 }
 
 /* ── CHART INSTANCES ─────────────────────────────────────── */
@@ -369,13 +383,14 @@ const voltage = Number(data.voltage || 0);
 let frequency = Number(data.frequency || 0);
 let pf = Number(data.pf || 0);
 let kwh = Number(data.kwh || 0);
+let confidence = Number(data.confidence || 0);
 
 if (voltage < 10) {
     frequency = 0;
     pf = 0;
 }
 
-    const cyclingDetected = detectCycling(power);
+    const cyclingDetected = data.deviceCycling ?? false;
 
     // Gunakan status dari ESP32
     let finalStatus = data.status || "NORMAL";
@@ -394,6 +409,7 @@ if (voltage < 10) {
       frequency: frequency,
       pf: pf,
       kwh: kwh,
+      confidence: confidence,
       status: finalStatus,
       relay: relayState,
       pln: data.pln,
@@ -593,9 +609,10 @@ function updateCostPanel(data) {
   const realtimeEl =
   document.getElementById('costRealtimeText');
   const confidence = Number(data.confidence || 0);
-  document.getElementById('costConf').textContent =
-"Tidak tersedia";
-    confidence + '%';
+  document.getElementById("costConf").textContent =
+confidence > 0
+? confidence.toFixed(2)+"%"
+: "Tidak tersedia";
   const trendBadge = document.getElementById('trendBadge');
   if (data.power > 1500) { trendBadge.textContent = 'TINGGI'; trendBadge.className = 'trend-badge danger'; }
   else if (data.power > 800) { trendBadge.textContent = 'NAIK'; trendBadge.className = 'trend-badge warning'; }
@@ -873,6 +890,7 @@ function clearBebanData(idx) {
   const store = getBebanStore(idx);
   store.power = []; store.current = [];
   store.voltage = []; store.labels = [];
+  store.status=[]; store.confidence=[];
   showToast(`Data Beban ${idx+1} direset`);
   showBebanChart(idx);
   initBebanPage();
@@ -996,11 +1014,11 @@ function updateBebanRealtime() {
   `;
 }
 
-function closeBebanChart() {
+async function closeBebanChart(){
 
-    selesaiPengujian();
+    await selesaiPengujian();
 
-    document.getElementById('bebanChartPanel').style.display = 'none';
+    document.getElementById('bebanChartPanel').style.display='none';
 
     document
         .querySelectorAll('.beban-card')
@@ -1011,8 +1029,6 @@ function closeBebanChart() {
 
     if (namaPanel)
         namaPanel.remove();
-
-    activeBeban = null;
 
     showToast("Pengujian beban dihentikan");
 
@@ -1251,60 +1267,9 @@ function downloadCSV(namaAlat, data) {
 
     csv += "DATA PENGUJIAN\n\n";
 
-    csv += "No,Waktu,Tegangan(V),Arus(A),Daya(W)\n";
+    csv += "No,Waktu,Tegangan(V),Arus(A),Daya(W),Status,Confidence\n";
 
-    const body = data.map((d,i)=>[
-    i+1,
-    d.waktu,
-    Number(d.voltage).toFixed(1),
-    Number(d.current).toFixed(3),
-    Number(d.power).toFixed(2),
-    d.status,
-    Number(d.confidence || 0).toFixed(2)
-]);
-
-doc.autoTable({
-
-    startY:y,
-
-    head:[[
-        "No",
-        "Waktu",
-        "Volt",
-        "Arus",
-        "Daya"
-    ]],
-
-    body:body,
-
-    theme:"grid",
-
-    headStyles:{
-
-        fillColor:[0,102,204],
-
-        textColor:255,
-
-        halign:"center"
-
-    },
-
-    styles:{
-
-        fontSize:9,
-
-        halign:"center"
-
-    },
-
-    alternateRowStyles:{
-
-        fillColor:[245,245,245]
-
-    }
-
-});
-
+    
     const blob = new Blob([csv],{
         type:"text/csv;charset=utf-8;"
     });
@@ -1393,6 +1358,8 @@ async function selesaiPengujian() {
         store.current = [];
         store.voltage = [];
         store.labels = [];
+        store.status = [];
+        store.confidence = [];
 
         pengujianAktif = false;
         testingActive = false;
@@ -1454,19 +1421,21 @@ function downloadExcel(namaAlat, data){
 
         [],
 
-        ["No","Waktu","Tegangan(V)","Arus(A)","Daya(W)"]
+        ["No","Waktu","Volt","Arus","Daya","Status","Confidence"]
 
     ];
 
     data.forEach((d,i)=>{
 
     wsData.push([
-        i+1,
-        d.waktu,
-        Number(d.voltage).toFixed(1),
-        Number(d.current).toFixed(3),
-        Number(d.power).toFixed(2)
-    ]);
+      i+1,
+      d.waktu,
+      Number(d.voltage).toFixed(1),
+      Number(d.current).toFixed(3),
+      Number(d.power).toFixed(2),
+      d.status,
+      Number(d.confidence || 0).toFixed(2)
+  ]);
 
 });
 const wb = XLSX.utils.book_new();
@@ -1502,7 +1471,6 @@ async function downloadPDF(namaAlat, data){
     //-----------------------------
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
 
     const margin = 15;
 
@@ -1517,10 +1485,17 @@ async function downloadPDF(namaAlat, data){
     const powerCanvas = document.getElementById("bebanPowerChart");
     const currentCanvas = document.getElementById("bebanCurrentChart");
 
-    const powerChart = powerCanvas.toDataURL("image/png");
-    const currentChart = currentCanvas.toDataURL("image/png");
-    const logo =
-    document.getElementById("logoUniversitas");
+    let powerChart = null;
+    let currentChart = null;
+
+    if(powerCanvas){
+        powerChart = powerCanvas.toDataURL("image/png");
+    }
+
+    if(currentCanvas){
+        currentChart = currentCanvas.toDataURL("image/png");
+    }
+    const logo = document.getElementById("logoUniversitas");
     //-----------------------------
     // HITUNG STATISTIK
     //-----------------------------
@@ -1569,17 +1544,6 @@ const pHigh =
 const pShort =
 ((shortCount/total)*100).toFixed(1);
 
-const pNormal =
-(normal/total*100).toFixed(1);
-
-const pWarning =
-(warning/total*100).toFixed(1);
-
-const pHigh =
-(high/total*100).toFixed(1);
-
-const pShort =
-(shortCircuit/total*100).toFixed(1);
 
 const confidenceList = data
     .map(d => Number(d.confidence) || 0);
@@ -1614,7 +1578,7 @@ else if(warningCount>0){
 
 }
 const confidence =
-avgConfidence.toFixed(2);
+avgConfidence.toFixed(2) + "%";
 
 //------------------------------------------------
 // TEMPORAL PATTERN ANALYSIS
@@ -1646,9 +1610,7 @@ deltaP.length>0 ?
 Math.max(...deltaP.map(v=>Math.abs(v))).toFixed(2)
 :0;
 
-//------------------------------------------------
 // KEPUTUSAN SISTEM
-//------------------------------------------------
 
 let keputusan = "";
 
@@ -1679,21 +1641,10 @@ else{
     "Terindikasi SHORT CIRCUIT. Segera matikan sumber listrik.";
 
 }
-    //-----------------------------
-    // WATERMARK
-    //-----------------------------
-
-    doc.setTextColor(230);
-
-    doc.setFontSize(34);
-
-    doc.setTextColor(0);
 
     //-----------------------------
     // HEADER
     //-----------------------------
-const logo =
-document.getElementById("logoUniversitas");
 
 doc.addImage(
 logo.src,
@@ -1899,7 +1850,7 @@ y
 );
 
 doc.text(
-": "+confidence+" %",
+": " + confidence,
 70,
 y
 );
@@ -2072,6 +2023,8 @@ y+=20;
 
     y += 8;
 
+    if(powerChart){
+
     doc.addImage(
         powerChart,
         "PNG",
@@ -2080,6 +2033,8 @@ y+=20;
         contentWidth,
         60
     );
+
+}
 
     y += 70;
 
@@ -2100,6 +2055,8 @@ y+=20;
 
     y += 8;
 
+    if(currentChart){
+
     doc.addImage(
         currentChart,
         "PNG",
@@ -2108,6 +2065,8 @@ y+=20;
         contentWidth,
         60
     );
+
+}
 
     doc.setTextColor(0,0,0);
 
@@ -2488,9 +2447,9 @@ async function resetProteksi() {
 
     try {
 
-        const res = await fetch("/api/reset-proteksi", {
-            method: "POST"
-        });
+        const res = await fetch(`${BASE_URL}/api/reset-proteksi`,{
+    method:"POST"
+})
 
         const data = await res.json();
 

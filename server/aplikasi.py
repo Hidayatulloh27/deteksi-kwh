@@ -54,7 +54,8 @@ if not os.path.exists(CSV_FILE):
     "kwh",
 
     "status",
-
+    "confidence",
+    
     "deltaPower",
     "deltaPowerRate",
     "temporalStatus",
@@ -81,7 +82,10 @@ latest_data = {
     "frequency": 0,
     "pf": 0,
     "kwh": 0,
+
     "status": "OFFLINE",
+    "confidence": 0,
+
     "relay": False,
     "pln": False,
 
@@ -169,6 +173,8 @@ def api_update():
             "kwh": data.get("kwh", 0),
 
             "status": data.get("status", "NORMAL"),
+            "confidence": data.get("confidence", 0),
+
             "relay": data.get("relay", True),
             "pln": data.get("pln", True),
 
