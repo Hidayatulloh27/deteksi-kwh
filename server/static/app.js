@@ -227,12 +227,79 @@ function initMainChart() {
     }
   });
 }
+/* ── INIT CHARTS ─────────────────────────────────────────── */
+
+function initMainChart() {
+
+    const canvas = document.getElementById('mainChart');
+    if (!canvas) return;
+
+    // Hindari chart ganda
+    if (charts.main) {
+        charts.main.destroy();
+        charts.main = null;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    charts.main = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Daya (W)',
+                ...chartDefaults('#00d4aa'),
+                data: []
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 200
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                x: {
+                    display: false
+                },
+                y: {
+                    min: 0,
+                    grid: {
+                        color: 'rgba(255,255,255,0.05)'
+                    },
+                    ticks: {
+                        color: '#64748b',
+                        maxTicksLimit: 5,
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    console.log("Main chart initialized");
+}
+
 function initHistChart() {
 
     const canvas = document.getElementById('histChart');
-    if (!canvas) return;
+    if (!canvas) {
+        console.log("Canvas histChart tidak ditemukan");
+        return;
+    }
 
-    // Hancurkan chart lama
+    // Hindari chart ganda
     if (charts.hist) {
         charts.hist.destroy();
         charts.hist = null;
@@ -240,9 +307,58 @@ function initHistChart() {
 
     const ctx = canvas.getContext('2d');
 
-    charts.hist = new Chart(ctx,{
-        type:'line',
-        ...
+    charts.hist = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Daya (W)',
+                    ...chartDefaults('#00d4aa'),
+                    data: []
+                },
+                {
+                    label: 'Arus (A)×100',
+                    ...chartDefaults('#3b82f6'),
+                    data: []
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#3d4a60',
+                        font: {
+                            size: 9
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(255,255,255,0.04)'
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255,255,255,0.05)'
+                    },
+                    ticks: {
+                        color: '#64748b',
+                        maxTicksLimit: 5
+                    }
+                }
+            }
+        }
     });
 
     console.log("Hist chart initialized");
