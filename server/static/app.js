@@ -227,30 +227,25 @@ function initMainChart() {
     }
   });
 }
-
 function initHistChart() {
-  const canvas = document.getElementById('histChart');
-  if (!canvas) { console.log("Canvas histChart tidak ditemukan"); return; }
-  const ctx = canvas.getContext('2d');
-  charts.hist = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [
-        { label: 'Daya (W)', ...chartDefaults('#00d4aa'), data: [] },
-        { label: 'Arus (A)×100', ...chartDefaults('#3b82f6'), data: [] }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-      scales: {
-        x: { ticks: { color: '#3d4a60', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', maxTicksLimit: 5 } }
-      }
+
+    const canvas = document.getElementById('histChart');
+    if (!canvas) return;
+
+    // Hancurkan chart lama
+    if (charts.hist) {
+        charts.hist.destroy();
+        charts.hist = null;
     }
-  });
-  console.log("Hist chart initialized");
+
+    const ctx = canvas.getContext('2d');
+
+    charts.hist = new Chart(ctx,{
+        type:'line',
+        ...
+    });
+
+    console.log("Hist chart initialized");
 }
 
 function initSparkline(param, color = '#00d4aa') {
@@ -559,7 +554,7 @@ function updateMetricCards(data) {
       if (minEl) minEl.textContent = `Min: ${mn}`;
       if (maxEl) maxEl.textContent = `Max: ${mx}`;
     }
-    updateSparkline(key);
+    //updateSparkline(key);
   });
 }
 
@@ -1228,53 +1223,33 @@ function showToast(msg) {
 
 /* ── MAIN LOOP ───────────────────────────────────────────── */
 async function tick() {
-  const data = await fetchLatest();
-  cekStatus(data);
-  console.log("RELAY STATUS:", data.relay);
-  recordToActiveBeban(data);
 
-  try {
+    try {
 
-    render(data);
-    addLog(data);
-    renderLogs(currentFilter);
+        const data = await fetchLatest();
 
-    if (charts.hist) {
+        if (!data) {
+            console.log("DATA NULL");
+            return;
+        }
 
-      const now = new Date().toLocaleTimeString(
-        'id-ID',
-        { hour12:false }
-      );
+        cekStatus(data);
 
-      if (charts.hist.data.labels.length >= 48) {
+        console.log("RELAY:", data.relay);
 
-        charts.hist.data.labels.shift();
-        charts.hist.data.datasets[0].data.shift();
-        charts.hist.data.datasets[1].data.shift();
+        recordToActiveBeban(data);
 
-      }
+        render(data);
 
-      charts.hist.data.labels.push(now);
+        addLog(data);
 
-      charts.hist.data.datasets[0].data.push(data.power);
+        renderLogs(currentFilter);
 
-      charts.hist.data.datasets[1].data.push(data.current * 100);
+    } catch(err){
 
-      charts.hist.update('none');
+        console.error("TICK ERROR:", err);
 
     }
-
-    if (activeBeban !== null) {
-
-      updateBebanRealtime();
-
-    }
-
-  } catch(err) {
-
-    console.error("Render error:", err);
-
-  }
 
 }
 
