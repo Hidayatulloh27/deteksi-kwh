@@ -379,35 +379,24 @@ function initNotification() {
 
 function showNotif(title, body) {
 
-  if (Notification.permission !== "granted") return;
+    console.log("SHOW NOTIF:", title, body);
 
-  new Notification(title, {
-    body: body,
-    icon: "/icon.png"
-  });
+    if (Notification.permission !== "granted") {
+        console.log("Permission belum granted");
+        return;
+    }
 
+    const notif = new Notification(title, {
+        body: body
+    });
+
+    notif.onclick = () => {
+        console.log("Notif diklik");
+    };
+
+    console.log("Notif berhasil dibuat");
 }
-async function ambilData() {
 
-  try {
-
-    const res = await fetch(
-      "https://web-production-68362.up.railway.app/api/latest"
-    );
-
-    const data = await res.json();
-
-    console.log("DATA:", data);
-
-    cekStatus(data);
-
-  } catch (err) {
-
-    console.log("ERROR FETCH:", err);
-
-  }
-
-}
 function cekStatus(data) {
     console.log("STATUS SEKARANG :", data.status);
     console.log("STATUS LAMA :", lastStatus);
@@ -453,10 +442,6 @@ function cekStatus(data) {
 let lastStatus = "";
 let lastPLN = null;
 
-initNotification();
-setInterval(() => {
-  ambilData();
-}, 3000);
 
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
@@ -1244,6 +1229,7 @@ function showToast(msg) {
 /* ── MAIN LOOP ───────────────────────────────────────────── */
 async function tick() {
   const data = await fetchLatest();
+  cekStatus(data);
   console.log("RELAY STATUS:", data.relay);
   recordToActiveBeban(data);
 
@@ -2610,29 +2596,3 @@ async function resetProteksi() {
       pollTimer = setInterval(tick, POLL_INTERVAL);
 
     });
-
-  fetch(`${BASE_URL}/api/settings`)
-    .then(res => res.json())
-    .then(cfg => {
-
-      CFG.warnPower = cfg.warnPower;
-      CFG.highPower = cfg.highPower;
-      CFG.shortPower = cfg.shortPower;
-
-      document.getElementById('cfgWarn').value = cfg.warnPower;
-      document.getElementById('cfgHigh').value = cfg.highPower;
-      document.getElementById('cfgShort').value = cfg.shortPower;
-
-      console.log("SETTINGS LOADED:", cfg);
-
-    })
-
-  .catch(err => console.error(err));
-  renderLogs('ALL');
-  setTimeout(initHistChart, 100);
-  tick();
-  pollTimer = setInterval(tick, POLL_INTERVAL);
-  showNotif(
-    "TEST NOTIF",
-    "Notifikasi Railway berhasil"
-);
