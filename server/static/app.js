@@ -364,6 +364,100 @@ function classifyStatus(p, a, v) {
   return 'NORMAL';
 }
 
+function initNotification() {
+  if (!("Notification" in window)) {
+    console.log("Browser tidak support notif");
+    return;
+  }
+
+  if (Notification.permission === "default") {
+    Notification.requestPermission().then((permission) => {
+      console.log("Permission notif:", permission);
+    });
+  }
+}
+
+function showNotif(title, body) {
+
+  if (Notification.permission !== "granted") return;
+
+  new Notification(title, {
+    body: body,
+    icon: "/icon.png"
+  });
+
+}
+async function ambilData() {
+
+  try {
+
+    const res = await fetch(
+      "https://web-production-68362.up.railway.app/api/latest"
+    );
+
+    const data = await res.json();
+
+    console.log("DATA:", data);
+
+    cekStatus(data);
+
+  } catch (err) {
+
+    console.log("ERROR FETCH:", err);
+
+  }
+
+}
+function cekStatus(data) {
+    console.log("STATUS SEKARANG :", data.status);
+    console.log("STATUS LAMA :", lastStatus);
+    if (!data) return;
+
+    // Status PLN berubah
+    if (lastPLN !== data.pln) {
+
+        if (data.pln) {
+            showNotif("✅ Smart KUPIT", "Kondisi listrik kembali normal");
+        } else {
+            showNotif("⚡ PLN MATI", "Tegangan PLN terputus");
+        }
+
+        lastPLN = data.pln;
+    }
+
+    // Status sistem berubah
+    if (lastStatus !== data.status) {
+
+        switch (data.status) {
+
+            case "WARNING":
+                showNotif("⚠ Smart KUPIT", "Daya melebihi batas warning");
+                break;
+
+            case "HIGH_CONSUMPTION":
+                showNotif("🔥 Konsumsi Tinggi", "Pemakaian listrik tinggi");
+                break;
+
+            case "SHORT_CIRCUIT":
+                showNotif("🚨 Hubung Singkat", "Relay diputus otomatis");
+                break;
+
+            case "NORMAL":
+                showNotif("✅ Smart KUPIT", "Kondisi listrik kembali normal");
+                break;
+        }
+
+        lastStatus = data.status;
+    }
+}
+let lastStatus = "";
+let lastPLN = null;
+
+initNotification();
+setInterval(() => {
+  ambilData();
+}, 3000);
+
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
   try {
@@ -2439,6 +2533,7 @@ for(let i=1;i<=totalPage;i++){
     );
 
 }
+
 async function resetProteksi() {
 
     if (!confirm("Reset proteksi dan hidupkan relay kembali?")) {
@@ -2471,28 +2566,50 @@ async function resetProteksi() {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  initSidebar();
-  initMainChart();
-  initAllSparklines();
-  initBebanPage();
+    window.addEventListener('DOMContentLoaded', () => {
 
-  if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/static/sw.js')
-      .then(reg => {
-          console.log('SW REGISTERED');
-      })
-      .catch(err => {
-          console.log('SW FAILED', err);
-      });
-  }
+      initNotification();   // <-- Tambahkan ini
 
-  if (Notification.permission !== "granted") {
-      Notification.requestPermission()
-      .then(permission => {
-          console.log("NOTIFICATION:", permission);
-      });
-  }
+      initSidebar();
+      initMainChart();
+      initAllSparklines();
+      initBebanPage();
+
+      if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/static/sw.js')
+          .then(reg => {
+              console.log('SW REGISTERED');
+          })
+          .catch(err => {
+              console.log('SW FAILED', err);
+          });
+      }
+
+      // Hapus blok Notification.requestPermission() yang lama
+
+      fetch(`${BASE_URL}/api/settings`)
+        .then(res => res.json())
+        .then(cfg => {
+
+          CFG.warnPower = cfg.warnPower;
+          CFG.highPower = cfg.highPower;
+          CFG.shortPower = cfg.shortPower;
+
+          document.getElementById('cfgWarn').value = cfg.warnPower;
+          document.getElementById('cfgHigh').value = cfg.highPower;
+          document.getElementById('cfgShort').value = cfg.shortPower;
+
+          console.log("SETTINGS LOADED:", cfg);
+
+        })
+        .catch(err => console.error(err));
+
+      renderLogs('ALL');
+      setTimeout(initHistChart, 100);
+      tick();
+      pollTimer = setInterval(tick, POLL_INTERVAL);
+
+    });
 
   fetch(`${BASE_URL}/api/settings`)
     .then(res => res.json())
@@ -2515,8 +2632,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setTimeout(initHistChart, 100);
   tick();
   pollTimer = setInterval(tick, POLL_INTERVAL);
-  sendNotification(
-   "TEST NOTIF",
-   "Notifikasi Railway berhasil"
+  showNotif(
+    "TEST NOTIF",
+    "Notifikasi Railway berhasil"
 );
-});
