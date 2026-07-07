@@ -140,6 +140,9 @@ function getBebanStore(idx) {
             labels: [],
             status: [],
             confidence: [],
+            deltaP: [],        // BARU
+            cycling: [],       // BARU
+            cyclePeriod: [],   // BARU
             namaAlat: BEBAN_LIST[idx].name
         };
 
@@ -176,8 +179,12 @@ function recordToActiveBeban(data) {
   store.status.push(data.status || "NORMAL");
   store.confidence.push(isNaN(data.confidence) ? 0 : data.confidence);
 
-  console.log("DATA TERSIMPAN =", store.power.length);
+  store.deltaP.push(Number(data.deltaP || 0));           // BARU
+  store.cycling.push(!!data.cycling);                    // BARU
+  store.cyclePeriod.push(data.cyclePeriod || null);      // BARU
 
+  console.log("DATA TERSIMPAN =", store.power.length);
+ 
   if (store.power.length > 180) {
 
     store.power.shift();
@@ -187,6 +194,9 @@ function recordToActiveBeban(data) {
 
     store.status.shift();
     store.confidence.shift();
+    store.deltaP.shift();        // BARU
+    store.cycling.shift();       // BARU
+    store.cyclePeriod.shift();   // BARU
 
 }
 }
@@ -1095,6 +1105,7 @@ function clearBebanData(idx) {
   store.power = []; store.current = [];
   store.voltage = []; store.labels = [];
   store.status=[]; store.confidence=[];
+  store.deltaP=[]; store.cycling=[]; store.cyclePeriod=[];  // BARU
   showToast(`Data Beban ${idx+1} direset`);
   showBebanChart(idx);
   initBebanPage();
@@ -1532,9 +1543,12 @@ async function selesaiPengujian() {
         power: store.power[i],
 
         status: store.status[i],
-        confidence: store.confidence[i]
-    });
+        confidence: store.confidence[i],
 
+        deltaP: store.deltaP[i],             // BARU
+        cycling: store.cycling[i],           // BARU
+        cyclePeriod: store.cyclePeriod[i]    // BARU
+    });
     }
 
     console.log("DATA =", hasil);
@@ -1582,6 +1596,9 @@ async function selesaiPengujian() {
         store.labels = [];
         store.status = [];
         store.confidence = [];
+        store.deltaP = [];        // BARU
+        store.cycling = [];       // BARU
+        store.cyclePeriod = [];  
 
         pengujianAktif = false;
         testingActive = false;
@@ -1754,14 +1771,17 @@ async function downloadPDF(namaAlat, data){
     // DESAIN / KONSTANTA WARNA & LAYOUT
     //=====================================================
     const COLOR = {
-        primary:   [15, 76, 129],     // biru navy — header & judul utama
-        accent:    [255, 122, 26],    // oranye — grafik daya / highlight
-        blueChart: [0, 122, 255],     // biru — grafik arus
-        text:      [40, 40, 40],
-        textMuted: [110, 118, 128],
-        line:      [220, 224, 229],
-        cardBg:    [246, 248, 251],
-        cardBorder:[225, 230, 236],
+        primaryDark: [10, 48, 92],
+        primary:     [15, 76, 129],
+        primaryLite: [35, 110, 168],
+        gold:        [212, 168, 83],
+        accent:      [255, 122, 26],
+        blueChart:   [0, 122, 255],
+        text:        [40, 40, 40],
+        textMuted:   [110, 118, 128],
+        line:        [220, 224, 229],
+        cardBg:      [246, 248, 251],
+        cardBorder:  [225, 230, 236],
         badgeNormalBg:  [222, 247, 236], badgeNormalText:  [15, 122, 79],
         badgeWarningBg: [255, 244, 214], badgeWarningText: [153, 105, 4],
         badgeHighBg:    [255, 231, 214], badgeHighText:    [176, 71, 0],
@@ -1774,7 +1794,19 @@ async function downloadPDF(namaAlat, data){
     const contentWidth = pageWidth - margin*2;
     let y = 20;
 
-    // ---- helper: judul section dengan bar warna di kiri ----
+    //---- helper: gradasi horizontal (simulasi gradient jsPDF) ----
+    function gradientRect(x, yPos, w, h, colorStart, colorEnd, steps = 60) {
+        const stepW = w / steps;
+        for (let i = 0; i < steps; i++) {
+            const t = i / (steps - 1);
+            const r = colorStart[0] + (colorEnd[0]-colorStart[0])*t;
+            const g = colorStart[1] + (colorEnd[1]-colorStart[1])*t;
+            const b = colorStart[2] + (colorEnd[2]-colorStart[2])*t;
+            doc.setFillColor(r,g,b);
+            doc.rect(x + stepW*i, yPos, stepW + 0.6, h, "F");
+        }
+    }
+
     function sectionTitle(title, yPos) {
         doc.setFillColor(...COLOR.primary);
         doc.rect(margin, yPos - 4.5, 1.2, 6, "F");
@@ -1786,7 +1818,6 @@ async function downloadPDF(namaAlat, data){
         return yPos + 8;
     }
 
-    // ---- helper: baris label:value rapi dengan kolom rata ----
     function infoRow(label, value, yPos, xLabel = margin, xColon = xLabel + 45, xValue = xLabel + 48) {
         doc.setFont("helvetica","normal");
         doc.setFontSize(10.5);
@@ -1799,12 +1830,26 @@ async function downloadPDF(namaAlat, data){
         return yPos + 6.2;
     }
 
-    // ---- helper: badge status berwarna ----
     function statusBadge(status, xPos, yPos) {
         let bg = COLOR.badgeNormalBg, tx = COLOR.badgeNormalText, label = status;
         if (status.includes("WARNING")) { bg = COLOR.badgeWarningBg; tx = COLOR.badgeWarningText; }
         else if (status.includes("HIGH")) { bg = COLOR.badgeHighBg; tx = COLOR.badgeHighText; }
         else if (status.includes("SHORT")) { bg = COLOR.badgeDangerBg; tx = COLOR.badgeDangerText; }
+        const w = doc.getTextWidth(label) + 8;
+        doc.setFillColor(...bg);
+        doc.roundedRect(xPos, yPos - 4.6, w, 6.5, 1.5, 1.5, "F");
+        doc.setFont("helvetica","bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...tx);
+        doc.text(label, xPos + 4, yPos);
+        doc.setTextColor(...COLOR.text);
+        return w;
+    }
+
+    function booleanBadge(isTrue, trueLabel, falseLabel, xPos, yPos) {
+        const bg = isTrue ? COLOR.badgeWarningBg : COLOR.badgeNormalBg;
+        const tx = isTrue ? COLOR.badgeWarningText : COLOR.badgeNormalText;
+        const label = isTrue ? trueLabel : falseLabel;
         const w = doc.getTextWidth(label) + 8;
         doc.setFillColor(...bg);
         doc.roundedRect(xPos, yPos - 4.6, w, 6.5, 1.5, 1.5, "F");
@@ -1830,6 +1875,14 @@ async function downloadPDF(namaAlat, data){
         }
     }
 
+    function mostFrequent(arr) {
+        const filtered = arr.filter(v => v !== null && v !== undefined);
+        if (!filtered.length) return null;
+        const counts = {};
+        filtered.forEach(v => counts[v] = (counts[v]||0) + 1);
+        return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+    }
+
     //-----------------------------
     // AMBIL GRAFIK
     //-----------------------------
@@ -1839,7 +1892,7 @@ async function downloadPDF(namaAlat, data){
     const logo = document.getElementById("logoUniversitas");
 
     //-----------------------------
-    // HITUNG STATISTIK (tidak diubah)
+    // HITUNG STATISTIK
     //-----------------------------
     const avgPower = data.reduce((a,b)=>a+b.power,0)/data.length;
     const avgCurrent = data.reduce((a,b)=>a+b.current,0)/data.length;
@@ -1865,7 +1918,7 @@ async function downloadPDF(namaAlat, data){
     const minConfidence = Math.min(...confidenceList);
 
     //------------------------------------------------
-    // RULE BASED ANALYSIS (tidak diubah)
+    // RULE BASED ANALYSIS
     //------------------------------------------------
     let finalStatus = "NORMAL";
     if (shortCount > 0) finalStatus = "SHORT CIRCUIT";
@@ -1874,15 +1927,35 @@ async function downloadPDF(namaAlat, data){
     const confidence = avgConfidence.toFixed(2) + "%";
 
     //------------------------------------------------
-    // TEMPORAL PATTERN ANALYSIS (tidak diubah)
+    // TEMPORAL PATTERN ANALYSIS
     //------------------------------------------------
-    let deltaP = [];
+    let deltaPArr = [];
     for (let i = 1; i < data.length; i++) {
-        deltaP.push(Number(data[i].power) - Number(data[i-1].power));
+        deltaPArr.push(Number(data[i].power) - Number(data[i-1].power));
     }
-    const maxDelta = deltaP.length>0 ? Math.max(...deltaP).toFixed(2) : 0;
-    const minDelta = deltaP.length>0 ? Math.min(...deltaP).toFixed(2) : 0;
-    const maxAbsDelta = deltaP.length>0 ? Math.max(...deltaP.map(v=>Math.abs(v))).toFixed(2) : 0;
+    const maxDelta = deltaPArr.length>0 ? Math.max(...deltaPArr).toFixed(2) : 0;
+    const minDelta = deltaPArr.length>0 ? Math.min(...deltaPArr).toFixed(2) : 0;
+    const maxAbsDelta = deltaPArr.length>0 ? Math.max(...deltaPArr.map(v=>Math.abs(v))).toFixed(2) : 0;
+
+    //------------------------------------------------
+    // ANALISIS LANJUTAN — FLUKTUASI & DEVICE CYCLING (BARU, dari data real)
+    //------------------------------------------------
+    const deltaPStoredArr = data.map(d => Number(d.deltaP || 0));
+    const abnormalFlukArr = deltaPStoredArr.filter(dp => Math.abs(dp) > CFG.tfluk);
+    const abnormalFlukCount = abnormalFlukArr.length;
+    const pFluk = total > 0 ? ((abnormalFlukCount/total)*100).toFixed(1) : "0.0";
+
+    const cyclingArr = data.map(d => !!d.cycling);
+    const cyclingCount = cyclingArr.filter(c => c).length;
+    const cyclingDetected = cyclingCount > 0;
+
+    let onOffTransitions = 0;
+    for (let i = 1; i < cyclingArr.length; i++) {
+        if (cyclingArr[i] && !cyclingArr[i-1]) onOffTransitions++;
+    }
+
+    const cyclePeriodArr = data.map(d => d.cyclePeriod).filter(p => p !== null && p !== undefined);
+    const cyclePeriodMode = mostFrequent(cyclePeriodArr);
 
     let keputusan = "";
     if (finalStatus === "NORMAL") keputusan = "Tidak ditemukan anomali konsumsi daya listrik.";
@@ -1890,33 +1963,78 @@ async function downloadPDF(namaAlat, data){
     else if (finalStatus === "HIGH CONSUMPTION") keputusan = "Beban termasuk kategori konsumsi daya tinggi.";
     else keputusan = "Terindikasi SHORT CIRCUIT. Segera matikan sumber listrik.";
 
-    //=====================================================
-    // HALAMAN 1 — COVER / HEADER
-    //=====================================================
-    doc.setFillColor(...COLOR.primary);
-    doc.rect(0, 0, pageWidth, 38, "F");
+    //------------------------------------------------
+    // NARASI DINAMIS — dihitung ulang dari data real, bukan teks statis
+    //------------------------------------------------
+    function buildNarasiRealtime() {
+        const bagian = [];
 
+        bagian.push(`Dari total ${total} data pengujian pada alat "${namaAlat}", sistem mencatat ${pNormal}% kondisi Normal, ${pWarning}% Warning, ${pHigh}% High Consumption, dan ${pShort}% Short Circuit, dengan status akhir sistem berada pada kategori ${finalStatus}.`);
+
+        if (cyclingDetected) {
+            bagian.push(`Pola device cycling terdeteksi pada ${cyclingCount} dari ${total} data (${((cyclingCount/total)*100).toFixed(1)}%) dengan ${onOffTransitions} kali transisi ON-OFF${cyclePeriodMode ? `, dan estimasi periode siklus sekitar ${cyclePeriodMode} detik` : ''}. Pola ini mengindikasikan beban bekerja secara termostatik/periodik, sesuai karakteristik perangkat yang menyala-mati otomatis.`);
+        } else {
+            bagian.push(`Tidak terdeteksi pola device cycling yang signifikan selama pengujian, mengindikasikan beban bersifat kontinu atau stabil tanpa siklus ON-OFF otomatis.`);
+        }
+
+        if (abnormalFlukCount > 0) {
+            bagian.push(`Fluktuasi daya abnormal (ΔP melebihi ambang ${CFG.tfluk} W) terjadi sebanyak ${abnormalFlukCount} kali (${pFluk}% dari total data), dengan perubahan daya terbesar mencapai ${maxAbsDelta} Watt. Kondisi ini perlu menjadi perhatian dalam evaluasi kestabilan beban.`);
+        } else {
+            bagian.push(`Tidak ditemukan fluktuasi daya abnormal (ΔP > ${CFG.tfluk} W) selama proses pengujian, menunjukkan kestabilan konsumsi daya yang baik.`);
+        }
+
+        const kualitas = avgConfidence >= 80 ? "tinggi" : avgConfidence >= 60 ? "cukup baik" : "perlu ditingkatkan";
+        bagian.push(`Nilai confidence rata-rata sistem tercatat sebesar ${avgConfidence.toFixed(2)}% (rentang ${minConfidence.toFixed(2)}% – ${maxConfidence.toFixed(2)}%), menunjukkan tingkat keandalan deteksi yang ${kualitas}.`);
+
+        return bagian.join(" ");
+    }
+
+    const narasiRealtime = buildNarasiRealtime();
+
+    //=====================================================
+    // HALAMAN 1 — COVER / HEADER (LEBIH GAGAH)
+    //=====================================================
+    // Gradasi navy tua -> navy terang sebagai background header
+    gradientRect(0, 0, pageWidth, 44, COLOR.primaryDark, COLOR.primaryLite);
+
+    // Garis aksen emas tipis di bawah header
+    doc.setFillColor(...COLOR.gold);
+    doc.rect(0, 44, pageWidth, 1.6, "F");
+
+    // Kotak putih di belakang logo supaya logo menonjol
     if (logo) {
-        doc.addImage(logo.src, "PNG", margin, 8, 22, 22);
+        doc.setFillColor(255,255,255);
+        doc.roundedRect(margin - 2, 7, 26, 26, 2, 2, "F");
+        doc.addImage(logo.src, "PNG", margin + 1, 10, 20, 20);
     }
 
     doc.setFont("helvetica","bold");
-    doc.setFontSize(17);
+    doc.setFontSize(19);
     doc.setTextColor(255,255,255);
-    doc.text("HASIL PENGUJIAN SISTEM IoT", pageWidth/2 + 8, 18, { align:"center" });
+    doc.text("HASIL PENGUJIAN SISTEM IoT", pageWidth/2 + 10, 17, { align:"center" });
 
     doc.setFont("helvetica","normal");
     doc.setFontSize(11);
-    doc.text("Deteksi Anomali Konsumsi Daya Listrik", pageWidth/2 + 8, 26, { align:"center" });
+    doc.setTextColor(225,235,245);
+    doc.text("Deteksi Anomali Konsumsi Daya Listrik Berbasis Rule-Based & Pattern Analysis", pageWidth/2 + 10, 25, { align:"center" });
 
+    // Badge kecil kanan atas: tanggal terbit
+    const tanggalStr = new Date().toLocaleDateString("id-ID", { day:"2-digit", month:"long", year:"numeric" });
     doc.setFontSize(8.5);
-    doc.text(new Date().toLocaleDateString("id-ID", { day:"2-digit", month:"long", year:"numeric" }), pageWidth/2 + 8, 32, { align:"center" });
+    doc.setTextColor(210, 222, 235);
+    doc.text(tanggalStr, pageWidth/2 + 10, 32, { align:"center" });
+
+    // Garis pemisah dekoratif kecil
+    doc.setDrawColor(...COLOR.gold);
+    doc.setLineWidth(0.6);
+    doc.line(pageWidth/2 + 10 - 30, 35, pageWidth/2 + 10 + 30, 35);
+    doc.setLineWidth(0.2);
 
     doc.setTextColor(...COLOR.text);
-    y = 50;
+    y = 55;
 
     //---------------------------------
-    // IDENTITAS MAHASISWA — dalam kartu
+    // IDENTITAS MAHASISWA
     //---------------------------------
     doc.setFillColor(...COLOR.cardBg);
     doc.setDrawColor(...COLOR.cardBorder);
@@ -1932,7 +2050,7 @@ async function downloadPDF(namaAlat, data){
     y += 8;
 
     //---------------------------------
-    // INFORMASI PENGUJIAN — kartu
+    // INFORMASI PENGUJIAN
     //---------------------------------
     doc.setFillColor(...COLOR.cardBg);
     doc.setDrawColor(...COLOR.cardBorder);
@@ -1946,7 +2064,7 @@ async function downloadPDF(namaAlat, data){
     y += 8;
 
     //-----------------------------
-    // STATISTIK PENGUJIAN — kartu
+    // STATISTIK PENGUJIAN
     //-----------------------------
     doc.setFillColor(...COLOR.cardBg);
     doc.setDrawColor(...COLOR.cardBorder);
@@ -1961,9 +2079,10 @@ async function downloadPDF(namaAlat, data){
     y = infoRow("Tegangan Rata-rata", avgVoltage.toFixed(2) + " Volt", y);
 
     y += 8;
+    if (y > 200) { doc.addPage(); y = 20; }
 
     //--------------------------------------
-    // HASIL ANALISIS SISTEM DETEKSI — kartu
+    // HASIL ANALISIS SISTEM DETEKSI
     //--------------------------------------
     doc.setFillColor(...COLOR.cardBg);
     doc.setDrawColor(...COLOR.cardBorder);
@@ -1986,25 +2105,51 @@ async function downloadPDF(namaAlat, data){
     y = infoRow("Short Circuit", shortCount, y);
 
     y += 8;
-
-    if (y > 210) { doc.addPage(); y = 20; }
+    if (y > 200) { doc.addPage(); y = 20; }
 
     //--------------------------------------
-    // TEMPORAL PATTERN ANALYSIS — kartu
+    // ANALISIS DETEKSI LANJUTAN — BARU
+    // (Rule-Based Status, ΔP Temporal, Fluktuasi Abnormal,
+    //  Device Cycling, Siklus ON-OFF, Periode Siklus)
     //--------------------------------------
     doc.setFillColor(...COLOR.cardBg);
     doc.setDrawColor(...COLOR.cardBorder);
-    doc.roundedRect(margin, y - 6, contentWidth, 26, 2.5, 2.5, "FD");
+    doc.roundedRect(margin, y - 6, contentWidth, 58, 2.5, 2.5, "FD");
 
-    y = sectionTitle("TEMPORAL PATTERN ANALYSIS", y);
-    y = infoRow("ΔP Maksimum", maxDelta + " Watt", y);
-    y = infoRow("ΔP Minimum", minDelta + " Watt", y);
-    y = infoRow("Perubahan Terbesar", maxAbsDelta + " Watt", y);
+    y = sectionTitle("ANALISIS DETEKSI LANJUTAN (REAL-TIME PATTERN)", y);
+
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLOR.textMuted);
+    doc.text("Rule-Based Status", margin, y);
+    doc.text(":", margin + 45, y);
+    statusBadge(finalStatus, margin + 48, y);
+    y += 6.2;
+
+    y = infoRow("ΔP Temporal (Maks / Min)", `${maxDelta} W  /  ${minDelta} W`, y);
+    y = infoRow("Perubahan ΔP Terbesar", maxAbsDelta + " W", y);
+
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLOR.textMuted);
+    doc.text("Fluktuasi Abnormal", margin, y);
+    doc.text(":", margin + 45, y);
+    booleanBadge(abnormalFlukCount > 0, `Ya, ${abnormalFlukCount}x (${pFluk}%)`, "Tidak ada", margin + 48, y);
+    y += 6.2;
+
+    doc.text("Device Cycling", margin, y);
+    doc.text(":", margin + 45, y);
+    booleanBadge(cyclingDetected, `Terdeteksi (${cyclingCount} data)`, "Tidak ada", margin + 48, y);
+    y += 6.2;
+
+    y = infoRow("Siklus ON-OFF", onOffTransitions + " kali", y);
+    y = infoRow("Periode Siklus", cyclePeriodMode ? cyclePeriodMode + " detik" : "Tidak terdeteksi", y);
 
     y += 8;
+    if (y > 190) { doc.addPage(); y = 20; }
 
     //--------------------------------------
-    // KEPUTUSAN SISTEM — kotak highlight
+    // KEPUTUSAN SISTEM
     //--------------------------------------
     const keputusanLines = doc.splitTextToSize(keputusan, contentWidth - 8);
     const keputusanBoxH = keputusanLines.length * 5.5 + 14;
@@ -2095,10 +2240,9 @@ async function downloadPDF(namaAlat, data){
     y = infoRow("Confidence Minimum", minConfidence.toFixed(2) + " %", y);
 
     y += 8;
-    y = sectionTitle("Interpretasi", y);
+    y = sectionTitle("Interpretasi (Real-Time, dihitung dari data pengujian ini)", y);
 
-    const interpretasiText = `Selama pengujian diperoleh ${normal} data Normal, ${warning} data Warning, ${high} data High Consumption, dan ${shortCircuit} data Short Circuit. Nilai confidence rata-rata sebesar ${avgConfidence.toFixed(2)}%. Hal ini menunjukkan bahwa algoritma Rule Based Detection mampu melakukan identifikasi kondisi konsumsi energi listrik secara konsisten selama proses pengujian.`;
-    const interpretasiLines = doc.splitTextToSize(interpretasiText, contentWidth);
+    const interpretasiLines = doc.splitTextToSize(narasiRealtime, contentWidth);
     doc.setFont("helvetica","normal");
     doc.setFontSize(10.5);
     doc.text(interpretasiLines, margin, y);
@@ -2153,7 +2297,7 @@ async function downloadPDF(namaAlat, data){
     });
 
     //=====================================================
-    // HALAMAN — KESIMPULAN
+    // HALAMAN — KESIMPULAN (REAL-TIME)
     //=====================================================
     doc.addPage();
     y = 30;
@@ -2168,8 +2312,7 @@ async function downloadPDF(namaAlat, data){
     doc.line(margin, y, pageWidth - margin, y);
     y += 16;
 
-    const kesimpulanText = `Selama pengujian diperoleh ${normalCount} data Normal, ${warningCount} data Warning, ${highCount} data High Consumption, dan ${shortCount} data Short Circuit. Nilai confidence rata-rata sebesar ${avgConfidence.toFixed(2)}%. Hal ini menunjukkan bahwa algoritma Rule Based Detection mampu melakukan identifikasi kondisi konsumsi energi listrik secara konsisten selama proses pengujian.`;
-    const kesimpulanLines = doc.splitTextToSize(kesimpulanText, contentWidth);
+    const kesimpulanLines = doc.splitTextToSize(narasiRealtime, contentWidth);
     doc.setFont("helvetica","normal");
     doc.setFontSize(11.5);
     doc.text(kesimpulanLines, margin, y);
