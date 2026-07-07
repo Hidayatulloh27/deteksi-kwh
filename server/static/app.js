@@ -1857,6 +1857,8 @@ async function downloadPDF(namaAlat, data){
         doc.setFontSize(9.5);
         doc.setTextColor(...tx);
         doc.text(label, xPos + 4, yPos);
+        doc.setFont("helvetica","normal");   // BARU — reset font
+        doc.setFontSize(10.5);               // BARU — reset ukuran
         doc.setTextColor(...COLOR.text);
     }
 
@@ -1978,11 +1980,10 @@ async function downloadPDF(namaAlat, data){
         }
 
         if (abnormalFlukCount > 0) {
-            bagian.push(`Fluktuasi daya abnormal (ΔP melebihi ambang ${CFG.tfluk} W) terjadi sebanyak ${abnormalFlukCount} kali (${pFluk}% dari total data), dengan perubahan daya terbesar mencapai ${maxAbsDelta} Watt. Kondisi ini perlu menjadi perhatian dalam evaluasi kestabilan beban.`);
+            bagian.push(`Fluktuasi daya abnormal (dP melebihi ambang ${CFG.tfluk} W) terjadi sebanyak ${abnormalFlukCount} kali (${pFluk}% dari total data), dengan perubahan daya terbesar mencapai ${maxAbsDelta} Watt. Kondisi ini perlu menjadi perhatian dalam evaluasi kestabilan beban.`);
         } else {
-            bagian.push(`Tidak ditemukan fluktuasi daya abnormal (ΔP > ${CFG.tfluk} W) selama proses pengujian, menunjukkan kestabilan konsumsi daya yang baik.`);
+            bagian.push(`Tidak ditemukan fluktuasi daya abnormal (dP > ${CFG.tfluk} W) selama proses pengujian, menunjukkan kestabilan konsumsi daya yang baik.`);
         }
-
         const kualitas = avgConfidence >= 80 ? "tinggi" : avgConfidence >= 60 ? "cukup baik" : "perlu ditingkatkan";
         bagian.push(`Nilai confidence rata-rata sistem tercatat sebesar ${avgConfidence.toFixed(2)}% (rentang ${minConfidence.toFixed(2)}% – ${maxConfidence.toFixed(2)}%), menunjukkan tingkat keandalan deteksi yang ${kualitas}.`);
 
@@ -2126,9 +2127,10 @@ async function downloadPDF(namaAlat, data){
     statusBadge(finalStatus, margin + 48, y);
     y += 6.2;
 
-    y = infoRow("ΔP Temporal (Maks / Min)", `${maxDelta} W  /  ${minDelta} W`, y);
-    y = infoRow("Perubahan ΔP Terbesar", maxAbsDelta + " W", y);
+    y = infoRow("dP Maks / Min", `${maxDelta} W  /  ${minDelta} W`, y);
+    y = infoRow("dP Terbesar", maxAbsDelta + " W", y);
 
+    // reset font sebelum baris badge, supaya tidak kebawa bold dari fungsi sebelumnya
     doc.setFont("helvetica","normal");
     doc.setFontSize(10.5);
     doc.setTextColor(...COLOR.textMuted);
@@ -2137,6 +2139,10 @@ async function downloadPDF(namaAlat, data){
     booleanBadge(abnormalFlukCount > 0, `Ya, ${abnormalFlukCount}x (${pFluk}%)`, "Tidak ada", margin + 48, y);
     y += 6.2;
 
+    // reset lagi — WAJIB, karena booleanBadge() di atas mengubah font jadi bold
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLOR.textMuted);
     doc.text("Device Cycling", margin, y);
     doc.text(":", margin + 45, y);
     booleanBadge(cyclingDetected, `Terdeteksi (${cyclingCount} data)`, "Tidak ada", margin + 48, y);
