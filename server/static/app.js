@@ -1,6 +1,7 @@
 /* ── CONFIG ──────────────────────────────────────────────── */
 let BASE_URL = 'https://web-production-b1df4.up.railway.app';
-let POLL_INTERVAL = 1000;
+let POLL_INTERVAL = 5000;
+let isTicking = false;
 
 const CFG = {
   warnPower: 1000, highPower: 2200, shortPower: 3000,
@@ -556,16 +557,29 @@ let lastPLN = null;
 
 /* ── FETCH / POLL ────────────────────────────────────────── */
 async function fetchLatest() {
+  const controller = new AbortController();
+
+const timeoutId = setTimeout(() => {
+    controller.abort();
+}, 7000);
   try {
-    const res = await fetch(`${BASE_URL}/api/latest?t=${Date.now()}`, { method: 'GET', cache: 'no-store' });
+    const res = await fetch(
+    `${BASE_URL}/api/latest?t=${Date.now()}`,
+    {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal
+    }
+);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const result = await res.json();
+    const result = await res.json(); 
+    clearTimeout(timeoutId);
     if (!result) throw new Error("Response kosong");
     const data = result.data || result;
     lastDataTime = data.status !== 'ESP_OFFLINE'
     ? Date.now()
     : 0;
-
+clearTimeout(timeoutId);
 const power = Number(data.power || 0);
 const current = Number(data.current || 0);
 const voltage = Number(data.voltage || 0);
@@ -1299,7 +1313,7 @@ async function saveSettings() {
   CFG.shortPower = parseInt(document.getElementById('cfgShort').value);
 
   clearInterval(pollTimer);
-  pollTimer = setInterval(tick, POLL_INTERVAL);
+  
 
   try {
 
@@ -1340,14 +1354,16 @@ function showToast(msg) {
 /* ── MAIN LOOP ───────────────────────────────────────────── */
 async function tick() {
 
+    if (isTicking) {
+        console.log("Tick dilewati");
+        return;
+    }
+
+    isTicking = true;
+
     try {
 
         const data = await fetchLatest();
-
-        if (!data) {
-            console.log("DATA NULL");
-            return;
-        }
 
         cekStatus(data);
 
@@ -1361,9 +1377,44 @@ async function tick() {
 
         renderLogs(currentFilter);
 
-    } catch(err){
+        if (charts.hist) {
 
-        console.error("TICK ERROR:", err);
+            const now = new Date().toLocaleTimeString(
+                'id-ID',
+                { hour12:false }
+            );
+
+            if (charts.hist.data.labels.length >= 48) {
+
+                charts.hist.data.labels.shift();
+                charts.hist.data.datasets[0].data.shift();
+                charts.hist.data.datasets[1].data.shift();
+
+            }
+
+            charts.hist.data.labels.push(now);
+
+            charts.hist.data.datasets[0].data.push(data.power);
+
+            charts.hist.data.datasets[1].data.push(data.current * 100);
+
+            charts.hist.update('none');
+
+        }
+
+        if (activeBeban !== null) {
+            updateBebanRealtime();
+        }
+
+    }
+    catch(err){
+
+        console.error(err);
+
+    }
+    finally{
+
+        isTicking = false;
 
     }
 
@@ -1627,6 +1678,68 @@ XLSX.writeFile(
 );
 
 }
+// ======================================
+// MEMBUAT GRAFIK UNTUK PDF
+// ======================================
+function createChartImage(data, field, label, color){
+
+    return new Promise(resolve=>{
+
+        const canvas = document.createElement("canvas");
+
+        canvas.width = 1200;
+        canvas.height = 500;
+
+        const ctx = canvas.getContext("2d");
+
+        new Chart(ctx,{
+            type:"line",
+            data:{
+                labels:data.map((d,i)=>i+1),
+                datasets:[{
+                    label:label,
+                    data:data.map(d=>Number(d[field])),
+                    borderColor:color,
+                    backgroundColor:color+"33",
+                    fill:true,
+                    tension:0.35,
+                    pointRadius:0
+                }]
+            },
+            options:{
+                responsive:false,
+                animation:false,
+                plugins:{
+                    legend:{
+                        display:true
+                    }
+                },
+                scales:{
+                    x:{
+                        title:{
+                            display:true,
+                            text:"Sampling"
+                        }
+                    },
+                    y:{
+                        title:{
+                            display:true,
+                            text:label
+                        }
+                    }
+                }
+            }
+        });
+
+        setTimeout(()=>{
+
+            resolve(canvas.toDataURL("image/png"));
+
+        },500);
+
+    });
+
+}
 async function downloadPDF(namaAlat, data){
 
     if(data.length===0){
@@ -1637,977 +1750,450 @@ async function downloadPDF(namaAlat, data){
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p","mm","a4");
 
-    //-----------------------------
-    // UKURAN HALAMAN
-    //-----------------------------
+    //=====================================================
+    // DESAIN / KONSTANTA WARNA & LAYOUT
+    //=====================================================
+    const COLOR = {
+        primary:   [15, 76, 129],     // biru navy — header & judul utama
+        accent:    [255, 122, 26],    // oranye — grafik daya / highlight
+        blueChart: [0, 122, 255],     // biru — grafik arus
+        text:      [40, 40, 40],
+        textMuted: [110, 118, 128],
+        line:      [220, 224, 229],
+        cardBg:    [246, 248, 251],
+        cardBorder:[225, 230, 236],
+        badgeNormalBg:  [222, 247, 236], badgeNormalText:  [15, 122, 79],
+        badgeWarningBg: [255, 244, 214], badgeWarningText: [153, 105, 4],
+        badgeHighBg:    [255, 231, 214], badgeHighText:    [176, 71, 0],
+        badgeDangerBg:  [255, 224, 224], badgeDangerText:  [180, 30, 30],
+    };
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 15;
-
     const contentWidth = pageWidth - margin*2;
-
     let y = 20;
+
+    // ---- helper: judul section dengan bar warna di kiri ----
+    function sectionTitle(title, yPos) {
+        doc.setFillColor(...COLOR.primary);
+        doc.rect(margin, yPos - 4.5, 1.2, 6, "F");
+        doc.setFont("helvetica","bold");
+        doc.setFontSize(12.5);
+        doc.setTextColor(...COLOR.primary);
+        doc.text(title, margin + 4, yPos);
+        doc.setTextColor(...COLOR.text);
+        return yPos + 8;
+    }
+
+    // ---- helper: baris label:value rapi dengan kolom rata ----
+    function infoRow(label, value, yPos, xLabel = margin, xColon = xLabel + 45, xValue = xLabel + 48) {
+        doc.setFont("helvetica","normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...COLOR.textMuted);
+        doc.text(label, xLabel, yPos);
+        doc.text(":", xColon, yPos);
+        doc.setTextColor(...COLOR.text);
+        doc.setFont("helvetica","bold");
+        doc.text(String(value), xValue, yPos);
+        return yPos + 6.2;
+    }
+
+    // ---- helper: badge status berwarna ----
+    function statusBadge(status, xPos, yPos) {
+        let bg = COLOR.badgeNormalBg, tx = COLOR.badgeNormalText, label = status;
+        if (status.includes("WARNING")) { bg = COLOR.badgeWarningBg; tx = COLOR.badgeWarningText; }
+        else if (status.includes("HIGH")) { bg = COLOR.badgeHighBg; tx = COLOR.badgeHighText; }
+        else if (status.includes("SHORT")) { bg = COLOR.badgeDangerBg; tx = COLOR.badgeDangerText; }
+        const w = doc.getTextWidth(label) + 8;
+        doc.setFillColor(...bg);
+        doc.roundedRect(xPos, yPos - 4.6, w, 6.5, 1.5, 1.5, "F");
+        doc.setFont("helvetica","bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...tx);
+        doc.text(label, xPos + 4, yPos);
+        doc.setTextColor(...COLOR.text);
+    }
+
+    function footerAndPageNum() {
+        const totalPage = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPage; i++) {
+            doc.setPage(i);
+            doc.setDrawColor(...COLOR.line);
+            doc.line(15, pageHeight - 12, pageWidth - 15, pageHeight - 12);
+            doc.setFontSize(8);
+            doc.setFont("helvetica","normal");
+            doc.setTextColor(...COLOR.textMuted);
+            doc.text("Kupit Smart IoT Energy Monitor", 15, pageHeight - 7);
+            doc.text("Sistem Monitoring Energi Listrik Berbasis IoT", pageWidth/2, pageHeight - 7, { align:"center" });
+            doc.text("Halaman " + i + " dari " + totalPage, pageWidth - 15, pageHeight - 7, { align:"right" });
+        }
+    }
 
     //-----------------------------
     // AMBIL GRAFIK
     //-----------------------------
+    const powerChart = await createChartImage(data, "power", "Power (W)", "#ff6b00");
+    const currentChart = await createChartImage(data, "current", "Current (A)", "#0080ff");
 
-    const powerCanvas = document.getElementById("bebanPowerChart");
-    const currentCanvas = document.getElementById("bebanCurrentChart");
-
-    let powerChart = null;
-    let currentChart = null;
-
-    if(powerCanvas){
-        powerChart = powerCanvas.toDataURL("image/png");
-    }
-
-    if(currentCanvas){
-        currentChart = currentCanvas.toDataURL("image/png");
-    }
     const logo = document.getElementById("logoUniversitas");
+
     //-----------------------------
-    // HITUNG STATISTIK
+    // HITUNG STATISTIK (tidak diubah)
     //-----------------------------
+    const avgPower = data.reduce((a,b)=>a+b.power,0)/data.length;
+    const avgCurrent = data.reduce((a,b)=>a+b.current,0)/data.length;
+    const avgVoltage = data.reduce((a,b)=>a+b.voltage,0)/data.length;
+    const maxPower = Math.max(...data.map(d=>d.power));
+    const minPower = Math.min(...data.map(d=>d.power));
 
-    const avgPower =
-        data.reduce((a,b)=>a+b.power,0)/data.length;
+    const normal = data.filter(d=>d.status==="NORMAL").length;
+    const warning = data.filter(d=>d.status==="WARNING").length;
+    const high = data.filter(d=>d.status==="HIGH_CONSUMPTION").length;
+    const shortCircuit = data.filter(d=>d.status==="SHORT_CIRCUIT").length;
+    const normalCount = normal, warningCount = warning, highCount = high, shortCount = shortCircuit;
 
-    const avgCurrent =
-        data.reduce((a,b)=>a+b.current,0)/data.length;
+    const total = data.length;
+    const pNormal  = ((normalCount/total)*100).toFixed(1);
+    const pWarning = ((warningCount/total)*100).toFixed(1);
+    const pHigh    = ((highCount/total)*100).toFixed(1);
+    const pShort   = ((shortCount/total)*100).toFixed(1);
 
-    const avgVoltage =
-        data.reduce((a,b)=>a+b.voltage,0)/data.length;
+    const confidenceList = data.map(d => Number(d.confidence) || 0);
+    const avgConfidence = confidenceList.reduce((a,b)=>a+b,0) / confidenceList.length;
+    const maxConfidence = Math.max(...confidenceList);
+    const minConfidence = Math.min(...confidenceList);
 
-    const maxPower =
-        Math.max(...data.map(d=>d.power))
-
-    const minPower =
-        Math.min(...data.map(d=>d.power));
-
-    const normal =
-data.filter(d=>d.status==="NORMAL").length;
-
-const warning =
-data.filter(d=>d.status==="WARNING").length;
-
-const high =
-data.filter(d=>d.status==="HIGH_CONSUMPTION").length;
-
-const shortCircuit =
-data.filter(d=>d.status==="SHORT_CIRCUIT").length;
-const normalCount = normal;
-const warningCount = warning;
-const highCount = high;
-const shortCount = shortCircuit;
-
-const total = data.length;
-const pNormal =
-((normalCount/total)*100).toFixed(1);
-
-const pWarning =
-((warningCount/total)*100).toFixed(1);
-
-const pHigh =
-((highCount/total)*100).toFixed(1);
-
-const pShort =
-((shortCount/total)*100).toFixed(1);
-
-
-const confidenceList = data
-    .map(d => Number(d.confidence) || 0);
-
-const avgConfidence =
-confidenceList.reduce((a,b)=>a+b,0) /
-confidenceList.length;
-
-const maxConfidence =
-Math.max(...confidenceList);
-
-const minConfidence =
-Math.min(...confidenceList);
     //------------------------------------------------
-// RULE BASED ANALYSIS
-//------------------------------------------------
-let finalStatus = "NORMAL";
-
-if(shortCount>0){
-
-    finalStatus="SHORT CIRCUIT";
-
-}
-else if(highCount>0){
-
-    finalStatus="HIGH CONSUMPTION";
-
-}
-else if(warningCount>0){
-
-    finalStatus="WARNING";
-
-}
-const confidence =
-avgConfidence.toFixed(2) + "%";
-
-//------------------------------------------------
-// TEMPORAL PATTERN ANALYSIS
-//------------------------------------------------
-
-let deltaP = [];
-
-for(let i=1;i<data.length;i++){
-
-    deltaP.push(
-        Number(data[i].power) -
-        Number(data[i-1].power)
-    );
-
-}
-
-const maxDelta =
-deltaP.length>0 ?
-Math.max(...deltaP).toFixed(2)
-:0;
-
-const minDelta =
-deltaP.length>0 ?
-Math.min(...deltaP).toFixed(2)
-:0;
-
-const maxAbsDelta =
-deltaP.length>0 ?
-Math.max(...deltaP.map(v=>Math.abs(v))).toFixed(2)
-:0;
-
-// KEPUTUSAN SISTEM
-
-let keputusan = "";
-
-if(finalStatus==="NORMAL"){
-
-    keputusan =
-    "Tidak ditemukan anomali konsumsi daya listrik.";
-
-}
-
-else if(finalStatus==="WARNING"){
-
-    keputusan =
-    "Terdapat kenaikan konsumsi daya. Disarankan melakukan pemantauan.";
-
-}
-
-else if(finalStatus==="HIGH CONSUMPTION"){
-
-    keputusan =
-    "Beban termasuk kategori konsumsi daya tinggi.";
-
-}
-
-else{
-
-    keputusan =
-    "Terindikasi SHORT CIRCUIT. Segera matikan sumber listrik.";
-
-}
-
-    //-----------------------------
-    // HEADER
-    //-----------------------------
-
-doc.addImage(
-logo.src,
-"PNG",
-15,
-10,
-22,
-22
-);
-    doc.setFont("helvetica","bold");
-    doc.setFontSize(18);
-
-    doc.text(
-        "HASIL PENGUJIAN SISTEM IoT",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
-
-    y+=8;
-
-    doc.setFontSize(13);
-
-    doc.text(
-        "Deteksi Anomali Konsumsi Daya Listrik",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
-
-    y+=12;
-
-    doc.setDrawColor(0,102,204);
-
-    doc.line(
-        margin,
-        y,
-        pageWidth-margin,
-        y
-    );
-
-    y+=10;
-        //-----------------------------
-
-    y+=10;
-    //---------------------------------
-// IDENTITAS MAHASISWA
-//---------------------------------
-
-doc.setDrawColor(0,102,204);
-doc.roundedRect(12,y-4,185,42,3,3);
-
-doc.setFont("helvetica","bold");
-doc.setFontSize(13);
-
-doc.text("IDENTITAS",15,y+4);
-
-doc.setFont("helvetica","normal");
-doc.setFontSize(11);
-
-y+=12;
-
-doc.text("Nama Mahasiswa",15,y);
-doc.text(":",55,y);
-doc.text("Muhammad Arif Hidayatulloh",60,y);
-
-y+=6;
-
-doc.text("NIM",15,y);
-doc.text(":",55,y);
-doc.text("231301007",60,y);
-
-y+=6;
-
-doc.text("Program Studi",15,y);
-doc.text(":",55,y);
-doc.text("Sistem Komputer",60,y);
-
-y+=6;
-
-doc.text("Universitas",15,y);
-doc.text(":",55,y);
-doc.text("Universitas Nahdlatul Ulama Sunan Giri",60,y);
-
-y+=6;
-
-doc.text("Lokasi Pengujian",15,y);
-doc.text(":",55,y);
-doc.text("Laboratorium Kupit_3DIoT",60,y);
-
-y+=15;
-//---------------------------------
-// INFORMASI PENGUJIAN
-//---------------------------------
-
-doc.setFont("helvetica","bold");
-doc.setFontSize(13);
-
-doc.text("INFORMASI PENGUJIAN",15,y);
-
-y+=8;
-
-doc.setFont("helvetica","normal");
-doc.setFontSize(11);
-
-doc.text("Nama Alat",15,y);
-doc.text(":",55,y);
-doc.text(namaAlat,60,y);
-
-y+=6;
-
-doc.text("Tanggal",15,y);
-doc.text(":",55,y);
-doc.text(new Date().toLocaleDateString("id-ID"),60,y);
-
-y+=6;
-
-doc.text("Jam",15,y);
-doc.text(":",55,y);
-doc.text(new Date().toLocaleTimeString("id-ID"),60,y);
-
-y+=15;
-doc.setDrawColor(0,102,204);
-
-
-    //-----------------------------
-    // STATISTIK
-    //-----------------------------
+    // RULE BASED ANALYSIS (tidak diubah)
+    //------------------------------------------------
+    let finalStatus = "NORMAL";
+    if (shortCount > 0) finalStatus = "SHORT CIRCUIT";
+    else if (highCount > 0) finalStatus = "HIGH CONSUMPTION";
+    else if (warningCount > 0) finalStatus = "WARNING";
+    const confidence = avgConfidence.toFixed(2) + "%";
+
+    //------------------------------------------------
+    // TEMPORAL PATTERN ANALYSIS (tidak diubah)
+    //------------------------------------------------
+    let deltaP = [];
+    for (let i = 1; i < data.length; i++) {
+        deltaP.push(Number(data[i].power) - Number(data[i-1].power));
+    }
+    const maxDelta = deltaP.length>0 ? Math.max(...deltaP).toFixed(2) : 0;
+    const minDelta = deltaP.length>0 ? Math.min(...deltaP).toFixed(2) : 0;
+    const maxAbsDelta = deltaP.length>0 ? Math.max(...deltaP.map(v=>Math.abs(v))).toFixed(2) : 0;
+
+    let keputusan = "";
+    if (finalStatus === "NORMAL") keputusan = "Tidak ditemukan anomali konsumsi daya listrik.";
+    else if (finalStatus === "WARNING") keputusan = "Terdapat kenaikan konsumsi daya. Disarankan melakukan pemantauan.";
+    else if (finalStatus === "HIGH CONSUMPTION") keputusan = "Beban termasuk kategori konsumsi daya tinggi.";
+    else keputusan = "Terindikasi SHORT CIRCUIT. Segera matikan sumber listrik.";
+
+    //=====================================================
+    // HALAMAN 1 — COVER / HEADER
+    //=====================================================
+    doc.setFillColor(...COLOR.primary);
+    doc.rect(0, 0, pageWidth, 38, "F");
+
+    if (logo) {
+        doc.addImage(logo.src, "PNG", margin, 8, 22, 22);
+    }
 
     doc.setFont("helvetica","bold");
-    doc.setFontSize(13);
-
-    doc.text("STATISTIK PENGUJIAN", margin, y);
-
-    y += 8;
+    doc.setFontSize(17);
+    doc.setTextColor(255,255,255);
+    doc.text("HASIL PENGUJIAN SISTEM IoT", pageWidth/2 + 8, 18, { align:"center" });
 
     doc.setFont("helvetica","normal");
     doc.setFontSize(11);
+    doc.text("Deteksi Anomali Konsumsi Daya Listrik", pageWidth/2 + 8, 26, { align:"center" });
 
-    doc.text(`Jumlah Data          : ${data.length}`, margin, y);
-    y += 6;
+    doc.setFontSize(8.5);
+    doc.text(new Date().toLocaleDateString("id-ID", { day:"2-digit", month:"long", year:"numeric" }), pageWidth/2 + 8, 32, { align:"center" });
 
-    doc.text(`Daya Rata-rata      : ${avgPower.toFixed(2)} Watt`, margin, y);
-    y += 6;
+    doc.setTextColor(...COLOR.text);
+    y = 50;
 
-    doc.text(`Daya Maksimum       : ${maxPower.toFixed(2)} Watt`, margin, y);
-    y += 6;
+    //---------------------------------
+    // IDENTITAS MAHASISWA — dalam kartu
+    //---------------------------------
+    doc.setFillColor(...COLOR.cardBg);
+    doc.setDrawColor(...COLOR.cardBorder);
+    doc.roundedRect(margin, y - 6, contentWidth, 44, 2.5, 2.5, "FD");
 
-    doc.text(`Daya Minimum        : ${minPower.toFixed(2)} Watt`, margin, y);
-    y += 6;
-
-    doc.text(`Arus Rata-rata      : ${avgCurrent.toFixed(3)} Ampere`, margin, y);
-    y += 6;
-
-    doc.text(`Tegangan Rata-rata : ${avgVoltage.toFixed(2)} Volt`, margin, y);
-
-    y += 15;
-
-    //--------------------------------------
-// HASIL ANALISIS SISTEM
-//--------------------------------------
-
-y += 15;
-
-doc.setFont("helvetica","bold");
-doc.setFontSize(13);
-
-doc.setTextColor(0,0,0);
-
-doc.text(
-"HASIL ANALISIS SISTEM DETEKSI",
-margin,
-y
-);
-
-y += 8;
-
-doc.setFont("helvetica","normal");
-doc.setFontSize(11);
-
-doc.text(
-"Status Sistem",
-margin,
-y
-);
-
-doc.text(
-": "+finalStatus,
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"Confidence Level",
-margin,
-y
-);
-
-doc.text(
-": " + confidence,
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"Normal",
-margin,
-y
-);
-
-doc.text(
-": "+normalCount,
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"Warning",
-margin,
-y
-);
-
-doc.text(
-": "+warningCount,
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"High Consumption",
-margin,
-y
-);
-
-doc.text(
-": "+highCount,
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"Short Circuit",
-margin,
-y
-);
-
-doc.text(
-": "+shortCount,
-70,
-y
-);
-
-y += 15;
-//--------------------------------------
-// TEMPORAL PATTERN
-//--------------------------------------
-
-doc.setFont("helvetica","bold");
-
-doc.text(
-"TEMPORAL PATTERN ANALYSIS",
-margin,
-y
-);
-
-y+=8;
-
-doc.setFont("helvetica","normal");
-
-doc.text(
-"ΔP Maksimum",
-margin,
-y
-);
-
-doc.text(
-": "+maxDelta+" Watt",
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"ΔP Minimum",
-margin,
-y
-);
-
-doc.text(
-": "+minDelta+" Watt",
-70,
-y
-);
-
-y+=6;
-
-doc.text(
-"Perubahan Terbesar",
-margin,
-y
-);
-
-doc.text(
-": "+maxAbsDelta+" Watt",
-70,
-y
-);
-
-y+=15;
-
-//--------------------------------------
-// KEPUTUSAN SISTEM
-//--------------------------------------
-
-doc.setFont("helvetica","bold");
-
-doc.text(
-"KEPUTUSAN SISTEM",
-margin,
-y
-);
-
-y+=8;
-
-doc.setFont("helvetica","normal");
-
-doc.text(
-
-keputusan,
-
-margin,
-
-y,
-
-{
-
-maxWidth:170
-
-}
-
-);
-
-y+=20;
-    //-----------------------------
-    // GRAFIK DAYA
-    //-----------------------------
-
-    doc.setFont("helvetica","bold");
-    doc.setFontSize(14);
-
-    doc.setTextColor(255,120,0);
-
-    doc.text(
-        "GRAFIK DAYA",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
+    y = sectionTitle("IDENTITAS MAHASISWA", y);
+    y = infoRow("Nama Mahasiswa", "Muhammad Arif Hidayatulloh", y);
+    y = infoRow("NIM", "231301007", y);
+    y = infoRow("Program Studi", "Sistem Komputer", y);
+    y = infoRow("Universitas", "Universitas Nahdlatul Ulama Sunan Giri", y);
+    y = infoRow("Lokasi Pengujian", "Laboratorium Kupit_3D IoT", y);
 
     y += 8;
 
-    if(powerChart){
+    //---------------------------------
+    // INFORMASI PENGUJIAN — kartu
+    //---------------------------------
+    doc.setFillColor(...COLOR.cardBg);
+    doc.setDrawColor(...COLOR.cardBorder);
+    doc.roundedRect(margin, y - 6, contentWidth, 26, 2.5, 2.5, "FD");
 
-    doc.addImage(
-        powerChart,
-        "PNG",
-        margin,
-        y,
-        contentWidth,
-        60
-    );
+    y = sectionTitle("INFORMASI PENGUJIAN", y);
+    y = infoRow("Nama Alat", namaAlat, y);
+    y = infoRow("Tanggal", new Date().toLocaleDateString("id-ID"), y);
+    y = infoRow("Jam", new Date().toLocaleTimeString("id-ID"), y);
 
-}
+    y += 8;
 
-    y += 70;
+    //-----------------------------
+    // STATISTIK PENGUJIAN — kartu
+    //-----------------------------
+    doc.setFillColor(...COLOR.cardBg);
+    doc.setDrawColor(...COLOR.cardBorder);
+    doc.roundedRect(margin, y - 6, contentWidth, 44, 2.5, 2.5, "FD");
+
+    y = sectionTitle("STATISTIK PENGUJIAN", y);
+    y = infoRow("Jumlah Data", data.length, y);
+    y = infoRow("Daya Rata-rata", avgPower.toFixed(2) + " Watt", y);
+    y = infoRow("Daya Maksimum", maxPower.toFixed(2) + " Watt", y);
+    y = infoRow("Daya Minimum", minPower.toFixed(2) + " Watt", y);
+    y = infoRow("Arus Rata-rata", avgCurrent.toFixed(3) + " Ampere", y);
+    y = infoRow("Tegangan Rata-rata", avgVoltage.toFixed(2) + " Volt", y);
+
+    y += 8;
+
+    //--------------------------------------
+    // HASIL ANALISIS SISTEM DETEKSI — kartu
+    //--------------------------------------
+    doc.setFillColor(...COLOR.cardBg);
+    doc.setDrawColor(...COLOR.cardBorder);
+    doc.roundedRect(margin, y - 6, contentWidth, 46, 2.5, 2.5, "FD");
+
+    y = sectionTitle("HASIL ANALISIS SISTEM DETEKSI", y);
+
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLOR.textMuted);
+    doc.text("Status Sistem", margin, y);
+    doc.text(":", margin + 45, y);
+    statusBadge(finalStatus, margin + 48, y);
+    y += 6.2;
+
+    y = infoRow("Confidence Level", confidence, y);
+    y = infoRow("Normal", normalCount, y);
+    y = infoRow("Warning", warningCount, y);
+    y = infoRow("High Consumption", highCount, y);
+    y = infoRow("Short Circuit", shortCount, y);
+
+    y += 8;
+
+    if (y > 210) { doc.addPage(); y = 20; }
+
+    //--------------------------------------
+    // TEMPORAL PATTERN ANALYSIS — kartu
+    //--------------------------------------
+    doc.setFillColor(...COLOR.cardBg);
+    doc.setDrawColor(...COLOR.cardBorder);
+    doc.roundedRect(margin, y - 6, contentWidth, 26, 2.5, 2.5, "FD");
+
+    y = sectionTitle("TEMPORAL PATTERN ANALYSIS", y);
+    y = infoRow("ΔP Maksimum", maxDelta + " Watt", y);
+    y = infoRow("ΔP Minimum", minDelta + " Watt", y);
+    y = infoRow("Perubahan Terbesar", maxAbsDelta + " Watt", y);
+
+    y += 8;
+
+    //--------------------------------------
+    // KEPUTUSAN SISTEM — kotak highlight
+    //--------------------------------------
+    const keputusanLines = doc.splitTextToSize(keputusan, contentWidth - 8);
+    const keputusanBoxH = keputusanLines.length * 5.5 + 14;
+
+    doc.setFillColor(...COLOR.badgeWarningBg);
+    doc.setDrawColor(...COLOR.accent);
+    doc.roundedRect(margin, y - 6, contentWidth, keputusanBoxH, 2.5, 2.5, "FD");
+
+    doc.setFont("helvetica","bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...COLOR.accent);
+    doc.text("KEPUTUSAN SISTEM", margin + 4, y);
+    y += 7;
+
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLOR.text);
+    doc.text(keputusanLines, margin + 4, y);
+    y += keputusanLines.length * 5.5 + 10;
+
+    if (y > 180) { doc.addPage(); y = 20; }
+
+    //-----------------------------
+    // GRAFIK DAYA
+    //-----------------------------
+    y = sectionTitle("Grafik Konsumsi Daya", y);
+
+    if (powerChart) {
+        doc.setDrawColor(...COLOR.cardBorder);
+        doc.roundedRect(margin - 2, y - 2, contentWidth + 4, 74, 2, 2);
+        doc.addImage(powerChart, "PNG", margin, y, contentWidth, 70);
+    }
+    y += 78;
 
     //-----------------------------
     // GRAFIK ARUS
     //-----------------------------
+    if (y > 200) { doc.addPage(); y = 20; }
 
-    doc.setTextColor(0,102,255);
+    y = sectionTitle("Grafik Arus Listrik", y);
 
-    doc.text(
-        "GRAFIK ARUS",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
+    if (currentChart) {
+        doc.setDrawColor(...COLOR.cardBorder);
+        doc.roundedRect(margin - 2, y - 2, contentWidth + 4, 64, 2, 2);
+        doc.addImage(currentChart, "PNG", margin, y, contentWidth, 60);
+    }
+
+    //=====================================================
+    // HALAMAN — ANALISIS HASIL PENGUJIAN
+    //=====================================================
+    doc.addPage();
+    y = 20;
+
+    doc.setFont("helvetica","bold");
+    doc.setFontSize(17);
+    doc.setTextColor(...COLOR.primary);
+    doc.text("ANALISIS HASIL PENGUJIAN", pageWidth/2, y, { align:"center" });
+    doc.setTextColor(...COLOR.text);
+    y += 5;
+    doc.setDrawColor(...COLOR.line);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 12;
+
+    y = sectionTitle("Ringkasan Rule Based Detection", y);
+
+    const ringkasan = [
+        ["Normal", normalCount, pNormal, COLOR.badgeNormalText],
+        ["Warning", warningCount, pWarning, COLOR.badgeWarningText],
+        ["High Consumption", highCount, pHigh, COLOR.badgeHighText],
+        ["Short Circuit", shortCount, pShort, COLOR.badgeDangerText],
+    ];
+    ringkasan.forEach(([label, count, pct, color]) => {
+        doc.setFont("helvetica","normal");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...COLOR.textMuted);
+        doc.text(label, margin, y);
+        doc.setFont("helvetica","bold");
+        doc.setTextColor(...color);
+        doc.text(`${count}  (${pct}%)`, margin + 55, y);
+        doc.setTextColor(...COLOR.text);
+        y += 6.5;
+    });
 
     y += 8;
+    y = sectionTitle("Confidence Analysis", y);
+    y = infoRow("Confidence Rata-rata", avgConfidence.toFixed(2) + " %", y);
+    y = infoRow("Confidence Maksimum", maxConfidence.toFixed(2) + " %", y);
+    y = infoRow("Confidence Minimum", minConfidence.toFixed(2) + " %", y);
 
-    if(currentChart){
+    y += 8;
+    y = sectionTitle("Interpretasi", y);
 
-    doc.addImage(
-        currentChart,
-        "PNG",
-        margin,
-        y,
-        contentWidth,
-        60
-    );
+    const interpretasiText = `Selama pengujian diperoleh ${normal} data Normal, ${warning} data Warning, ${high} data High Consumption, dan ${shortCircuit} data Short Circuit. Nilai confidence rata-rata sebesar ${avgConfidence.toFixed(2)}%. Hal ini menunjukkan bahwa algoritma Rule Based Detection mampu melakukan identifikasi kondisi konsumsi energi listrik secara konsisten selama proses pengujian.`;
+    const interpretasiLines = doc.splitTextToSize(interpretasiText, contentWidth);
+    doc.setFont("helvetica","normal");
+    doc.setFontSize(10.5);
+    doc.text(interpretasiLines, margin, y);
 
-}
-
-    doc.setTextColor(0,0,0);
-
-    y += 70;
-
+    //=====================================================
+    // HALAMAN — DATA HASIL PENGUJIAN (TABEL)
+    //=====================================================
     doc.addPage();
-
-y=20;
-
-doc.setFontSize(18);
-
-doc.setFont("helvetica","bold");
-
-doc.text(
-"ANALISIS HASIL PENGUJIAN",
-pageWidth/2,
-20,
-{
-align:"center"
-}
-);
-y+=15;
-
-doc.setFontSize(13);
-
-doc.text(
-"Ringkasan Rule Based Detection",
-15,
-y
-);
-
-y+=10;
-
-doc.setFontSize(11);
-
-doc.text(
-`Normal : ${normalCount} (${pNormal}%)`,
-20,
-y
-);
-
-y+=7;
-
-doc.text(
-`Warning : ${warningCount} (${pWarning}%)`,
-20,
-y
-);
-
-y+=7;
-
-doc.text(
-`High Consumption : ${highCount} (${pHigh}%)`,
-20,
-y
-);
-
-y+=7;
-
-doc.text(
-`Short Circuit : ${shortCount} (${pShort}%)`,
-20,
-y
-);
-
-y+=7;
-
-
-y+=15;
-
-doc.setFontSize(13);
-
-doc.text(
-"Confidence Analysis",
-15,
-y
-);
-
-y+=8;
-
-doc.setFontSize(11);
-
-doc.text(
-"Confidence Rata-rata : "+
-avgConfidence.toFixed(2)+" %",
-20,
-y
-);
-
-y+=6;
-
-doc.text(
-"Confidence Maksimum : "+
-maxConfidence.toFixed(2)+" %",
-20,
-y
-);
-
-y+=6;
-
-doc.text(
-"Confidence Minimum : "+
-minConfidence.toFixed(2)+" %",
-20,
-y
-);
-y+=18;
-
-doc.setFontSize(13);
-
-doc.setFont("helvetica","bold");
-
-doc.text(
-"Interpretasi",
-15,
-y
-);
-
-y+=8;
-
-doc.setFont("helvetica","normal");
-
-doc.setFontSize(11);
-
-doc.text(
-
-`Selama pengujian diperoleh ${normal}
-data Normal,
-
-${warning} data Warning,
-
-${high} data High Consumption,
-
-dan ${shortCircuit}
-data Short Circuit.
-
-Nilai confidence rata-rata sebesar
-${avgConfidence.toFixed(2)}%.
-
-Hal ini menunjukkan bahwa
-algoritma Rule Based Detection
-mampu melakukan identifikasi
-kondisi konsumsi energi listrik
-secara konsisten selama proses
-pengujian.`,
-
-20,
-
-y
-
-);
-    //-----------------------------
-    // HALAMAN BARU
-    //-----------------------------
-
-    doc.addPage();
-
     y = 20;
-        //------------------------------------------
-    // JUDUL TABEL
-    //------------------------------------------
 
     doc.setFont("helvetica","bold");
     doc.setFontSize(16);
-
-    doc.text(
-        "DATA HASIL PENGUJIAN",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
-
-    y += 12;
-    // DATA
-    //------------------------------------------
+    doc.setTextColor(...COLOR.primary);
+    doc.text("DATA HASIL PENGUJIAN", pageWidth/2, y, { align:"center" });
+    doc.setTextColor(...COLOR.text);
+    y += 5;
+    doc.setDrawColor(...COLOR.line);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 8;
 
     const body = data.map((d,i)=>[
-    i+1,
-    d.waktu,
-    Number(d.voltage).toFixed(1),
-    Number(d.current).toFixed(3),
-    Number(d.power).toFixed(2),
-    d.status,
-    Number(d.confidence || 0).toFixed(2)
-]);
+        i+1,
+        d.waktu,
+        Number(d.voltage).toFixed(1),
+        Number(d.current).toFixed(3),
+        Number(d.power).toFixed(2),
+        d.status,
+        Number(d.confidence || 0).toFixed(2)
+    ]);
 
-doc.autoTable({
+    doc.autoTable({
+        startY: y,
+        head: [["No","Waktu","Tegangan","Arus","Daya","Status","Confidence (%)"]],
+        body: body,
+        theme: "grid",
+        styles: {
+            fontSize: 8.5,
+            cellPadding: 2.4,
+            lineColor: COLOR.line,
+            lineWidth: 0.2,
+        },
+        headStyles: {
+            fillColor: COLOR.primary,
+            textColor: 255,
+            halign: "center",
+            fontStyle: "bold",
+            fontSize: 9,
+        },
+        bodyStyles: { halign: "center", textColor: COLOR.text },
+        alternateRowStyles: { fillColor: COLOR.cardBg },
+        margin: { left: margin, right: margin }
+    });
 
-    startY:y,
-
-    head:[[
-  "No",
-  "Waktu",
-  "Tegangan",
-  "Arus",
-  "Daya",
-  "Status",
-  "Confidence (%)"
-  ]],
-
-    body:body,
-
-    theme:"grid",
-
-    headStyles:{
-        fillColor:[0,102,204],
-        textColor:255,
-        halign:"center",
-        fontStyle:"bold"
-    },
-
-    bodyStyles:{
-        halign:"center"
-    },
-
-    alternateRowStyles:{
-        fillColor:[245,245,245]
-    },
-
-    margin:{
-        left:15,
-        right:15
-    }
-
-});
-
-    //------------------------------------------
-    // HALAMAN KESIMPULAN
-    //------------------------------------------
-
+    //=====================================================
+    // HALAMAN — KESIMPULAN
+    //=====================================================
     doc.addPage();
-
-    y=30;
+    y = 30;
 
     doc.setFont("helvetica","bold");
-
     doc.setFontSize(18);
+    doc.setTextColor(...COLOR.primary);
+    doc.text("KESIMPULAN", pageWidth/2, y, { align:"center" });
+    doc.setTextColor(...COLOR.text);
+    y += 6;
+    doc.setDrawColor(...COLOR.line);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 16;
 
-    doc.text(
-        "KESIMPULAN",
-        pageWidth/2,
-        y,
-        {
-            align:"center"
-        }
-    );
-
-    y+=20;
-
+    const kesimpulanText = `Selama pengujian diperoleh ${normalCount} data Normal, ${warningCount} data Warning, ${highCount} data High Consumption, dan ${shortCount} data Short Circuit. Nilai confidence rata-rata sebesar ${avgConfidence.toFixed(2)}%. Hal ini menunjukkan bahwa algoritma Rule Based Detection mampu melakukan identifikasi kondisi konsumsi energi listrik secara konsisten selama proses pengujian.`;
+    const kesimpulanLines = doc.splitTextToSize(kesimpulanText, contentWidth);
     doc.setFont("helvetica","normal");
-
-    doc.setFontSize(12);
-
-    doc.text(
-
-`Selama pengujian diperoleh ${normalCount}
-data Normal,
-
-${warningCount} data Warning,
-
-${highCount} data High Consumption,
-
-dan ${shortCount}
-data Short Circuit.
-
-Nilai confidence rata-rata sebesar
-${avgConfidence.toFixed(2)}%.
-
-Hal ini menunjukkan bahwa
-algoritma Rule Based Detection
-mampu melakukan identifikasi
-kondisi konsumsi energi listrik
-secara konsisten selama proses
-pengujian.`,
-
-20,
-
-y
-
-);
+    doc.setFontSize(11.5);
+    doc.text(kesimpulanLines, margin, y);
+    y += kesimpulanLines.length * 6 + 20;
 
     //------------------------------------------
     // TANDA TANGAN
     //------------------------------------------
-
-
     doc.setFont("helvetica","normal");
-
-    doc.text(
-
-"Mengetahui,",
-
-150,
-
-220
-
-);
-
-    doc.text(
-
-"Penguji",
-
-150,
-
-227
-
-);
-
-    doc.line(
-
-145,
-
-260,
-
-190,
-
-260
-
-);
+    doc.setFontSize(11);
+    doc.text("Mengetahui,", 150, 220);
+    doc.text("Penguji", 150, 227);
+    doc.setDrawColor(...COLOR.text);
+    doc.line(145, 260, 190, 260);
 
     //------------------------------------------
-    // FOOTER
+    // FOOTER + NOMOR HALAMAN (semua halaman)
     //------------------------------------------
-const totalPage = doc.internal.getNumberOfPages();
-
-for(let i=1;i<=totalPage;i++){
-
-    doc.setPage(i);
-
-    doc.setDrawColor(180);
-    doc.line(15,285,195,285);
-
-    doc.setFontSize(9);
-    doc.setTextColor(120);
-
-    doc.text(
-        "Kupit Smart IoT Energy Monitor",
-        15,
-        290
-    );
-
-    doc.text(
-        "Sistem Monitoring Energi Listrik Berbasis IoT",
-        pageWidth/2,
-        290,
-        {align:"center"}
-    );
-
-    doc.text(
-        "Halaman "+i+" dari "+totalPage,
-        195,
-        290,
-        {align:"right"}
-    );
-
-}
+    footerAndPageNum();
 
     //------------------------------------------
     // SIMPAN
     //------------------------------------------
-
-    doc.save(
-
-        namaAlat.replace(/\s+/g,"_")+
-
-        "_Laporan_Pengujian.pdf"
-
-    );
+    doc.save(namaAlat.replace(/\s+/g,"_") + "_Laporan_Pengujian.pdf");
 
 }
 
@@ -2645,45 +2231,43 @@ async function resetProteksi() {
 
     window.addEventListener('DOMContentLoaded', () => {
 
-      initNotification();   // <-- Tambahkan ini
+    initNotification();
 
-      initSidebar();
-      initMainChart();
-      initAllSparklines();
-      initBebanPage();
+    initSidebar();
+    initMainChart();
+    initAllSparklines();
+    initBebanPage();
 
-      if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/static/sw.js')
-          .then(reg => {
-              console.log('SW REGISTERED');
-          })
-          .catch(err => {
-              console.log('SW FAILED', err);
-          });
-      }
-
-      // Hapus blok Notification.requestPermission() yang lama
-
-      fetch(`${BASE_URL}/api/settings`)
-        .then(res => res.json())
-        .then(cfg => {
-
-          CFG.warnPower = cfg.warnPower;
-          CFG.highPower = cfg.highPower;
-          CFG.shortPower = cfg.shortPower;
-
-          document.getElementById('cfgWarn').value = cfg.warnPower;
-          document.getElementById('cfgHigh').value = cfg.highPower;
-          document.getElementById('cfgShort').value = cfg.shortPower;
-
-          console.log("SETTINGS LOADED:", cfg);
-
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/sw.js')
+        .then(reg => {
+            console.log('SW REGISTERED');
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+            console.log('SW FAILED', err);
+        });
+    }
 
-      renderLogs('ALL');
-      setTimeout(initHistChart, 100);
-      tick();
-      pollTimer = setInterval(tick, POLL_INTERVAL);
+    fetch(`${BASE_URL}/api/settings`)
+    .then(res => res.json())
+    .then(cfg => {
 
-    });
+        CFG.warnPower = cfg.warnPower;
+        CFG.highPower = cfg.highPower;
+        CFG.shortPower = cfg.shortPower;
+
+        document.getElementById('cfgWarn').value = cfg.warnPower;
+        document.getElementById('cfgHigh').value = cfg.highPower;
+        document.getElementById('cfgShort').value = cfg.shortPower;
+
+        console.log("SETTINGS LOADED:", cfg);
+
+    })
+    .catch(err => console.error(err));
+
+    renderLogs('ALL');
+    setTimeout(initHistChart,100);
+
+    startPolling();
+
+});
