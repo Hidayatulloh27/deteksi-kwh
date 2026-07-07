@@ -2228,7 +2228,25 @@ async function resetProteksi() {
 
     }
 }
+let pollTimer = null;
 
+function startPolling() {
+
+    if (pollTimer) {
+        clearTimeout(pollTimer);
+    }
+
+    async function poll() {
+
+        await tick();
+
+        pollTimer = setTimeout(poll, POLL_INTERVAL);
+
+    }
+
+    poll();
+
+}
     window.addEventListener('DOMContentLoaded', () => {
 
     initNotification();
