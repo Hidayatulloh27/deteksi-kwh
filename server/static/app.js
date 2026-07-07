@@ -2228,7 +2228,6 @@ async function resetProteksi() {
 
     }
 }
-let pollTimer = null;
 
 function startPolling() {
 
